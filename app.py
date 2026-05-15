@@ -739,39 +739,45 @@ if st.session_state.report_data is not None:
         # Location filter
         loc_col = "location" if "location" in df_report.columns else None
         if loc_col:
-            locs = ["ทั้งหมด"] + sorted(df_report[loc_col].dropna().unique().tolist())
-            sel_loc = st.selectbox("Location", locs)
+            # ลบ ["ทั้งหมด"] ออก เหลือแค่ข้อมูลดิบๆ เลยครับ
+            locs = sorted(df_report[loc_col].dropna().unique().tolist())
+            sel_loc = st.multiselect("Location", locs)
         else:
-            sel_loc = "ทั้งหมด"
+            sel_loc = [] # ให้เป็น List ว่างแทนคำว่า "ทั้งหมด"
 
     with col_f2:
         # Product Status filter
         if "Product Status" in df_report.columns:
-            statuses = ["ทั้งหมด"] + sorted(df_report["Product Status"].dropna().unique().tolist())
-            sel_status = st.selectbox("Product Status", statuses)
+            statuses = sorted(df_report["Product Status"].dropna().unique().tolist())
+            sel_status = st.multiselect("Product Status", statuses)
         else:
-            sel_status = "ทั้งหมด"
+            sel_status = []
 
     with col_f3:
         # Class filter
         if "Class" in df_report.columns:
-            classes = ["ทั้งหมด"] + sorted(df_report["Class"].dropna().unique().tolist())
-            sel_class = st.selectbox("Class (Brand)", classes)
+            classes = sorted(df_report["Class"].dropna().unique().tolist())
+            sel_class = st.multiselect("Class (Brand)", classes)
         else:
-            sel_class = "ทั้งหมด"
+            sel_class = []
 
     with col_f4:
-        # Search item code
         search = st.text_input("🔍 ค้นหา Item Code", placeholder="เช่น BL-1023943")
 
-    # Apply filters
+    # --- Apply filters (ตัวตรรกะที่คุณเขียนมาถูกต้องแล้วครับ) ---
     df_display = df_report.copy()
-    if sel_loc != "ทั้งหมด" and loc_col:
-        df_display = df_display[df_display[loc_col] == sel_loc]
-    if sel_status != "ทั้งหมด" and "Product Status" in df_display.columns:
-        df_display = df_display[df_display["Product Status"] == sel_status]
-    if sel_class != "ทั้งหมด" and "Class" in df_display.columns:
-        df_display = df_display[df_display["Class"] == sel_class]
+    
+    # ถ้า sel_loc มีข้อมูล (User เลือกบางอย่าง) ให้กรองตามนั้น
+    if sel_loc and loc_col:
+        df_display = df_display[df_display[loc_col].isin(sel_loc)]
+        
+    if sel_status and "Product Status" in df_display.columns:
+        df_display = df_display[df_display["Product Status"].isin(sel_status)]
+        
+    if sel_class and "Class" in df_display.columns:
+        df_display = df_display[df_display["Class"].isin(sel_class)]
+        
+    # ค้นหาด้วยคีย์เวิร์ด (เหมือนเดิม)
     if search:
         item_col = "item_code" if "item_code" in df_display.columns else "Material Code"
         if item_col in df_display.columns:
@@ -780,7 +786,30 @@ if st.session_state.report_data is not None:
             ]
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
-    st.dataframe(df_display, use_container_width=True, hide_index=True, height=400)
+    # 1. จัดการ On Floor Date (ถ้ามี) ให้แสดงเป็นวันที่สวยๆ
+    if 'on_floor_date' in df_display.columns:
+        df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce')
+
+    # 2. หาคอลัมน์ที่เป็นตัวเลขทั้งหมด เพื่อปรับฟอร์แมต
+    num_cols = df_display.select_dtypes(include=['number']).columns
+    
+    # 3. สร้างการตั้งค่า: เลข 0 ให้แสดงเป็นค่าว่าง (หรือขีด) และไม่มีทศนิยม
+    column_configuration = {
+        col: st.column_config.NumberColumn(format="%d") for col in num_cols
+    }
+    
+    # เพิ่มการตั้งค่าวันที่ (ถ้ามี)
+    if 'on_floor_date' in df_display.columns:
+        column_configuration['on_floor_date'] = st.column_config.DateColumn(format="DD/MM/YYYY")
+
+    # 4. แสดงผลตารางด้วยหน้าตาใหม่
+    st.dataframe(
+        df_display, 
+        column_config=column_configuration,
+        use_container_width=True, 
+        hide_index=True, 
+        height=400
+    )
 
     # Download button
     st.divider()

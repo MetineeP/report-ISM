@@ -787,7 +787,7 @@ if st.session_state.report_data is not None:
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
     
-    # 1. ล้างค่า ERROR และจัดการวันที่ (เหมือนเดิม)
+    # 1. จัดการคำว่า ERROR และข้อมูลวันที่ (เหมือนเดิม)
     df_display = df_display.replace(["ERROR", "Error", "error"], "")
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
@@ -798,39 +798,31 @@ if st.session_state.report_data is not None:
     amt_pc_cols = [c for c in num_cols if any(kw in c.lower() for kw in amt_pc_keywords) or c in ["Standard Cost", "Active Sales Pricing"]]
     qty_cols = [c for c in num_cols if c not in amt_pc_cols]
 
-    # 3. สร้างฟังก์ชันพรางสายตาเลข 0 (Conditional Formatting)
-    # เราจะใช้ Styler เพื่อทำให้เลข 0 เป็นสีขาวและจัดกึ่งกลาง
-    def highlight_zeros(val):
-        try:
-            # ถ้าค่าเป็น 0 หรือ 0.0 ให้ใช้สีฟอนต์ขาว (พรางสายตา)
-            if float(val) == 0:
-                return 'color: white; text-align: center;'
-            # ถ้ามียอด ให้จัดกึ่งกลางปกติ
-            return 'text-align: center;'
-        except:
-            return 'text-align: center;'
-
-    # 4. ตั้งค่าหน้าตาราง (Config)
+    # 3. ตั้งค่าหน้าตาราง (Config)
     column_configuration = {}
+
+    # ตั้งค่ากลุ่มยอดเงิน: ชิดขวา + มีคอมมา
     for c in amt_pc_cols:
         column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
+    # ตั้งค่ากลุ่มจำนวน (Aging Buckets): 
+    # เราจะใช้วิธีเปลี่ยน 0 เป็นค่าว่าง "" เพื่อให้สายตาโฟกัสเฉพาะช่องที่มีตัวเลข
     for c in qty_cols:
-        # แปลงข้อมูลเป็นเลขจำนวนเต็ม (กำจัด .0)
+        # แปลงเป็นจำนวนเต็มก่อน
         df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0).astype(int)
-        column_configuration[c] = st.column_config.NumberColumn(
+        
+        # ใช้ TextColumn เพื่อให้แสดงค่าว่างหรือขีดได้ตามต้องการ และจัดกึ่งกลาง
+        # หมายเหตุ: เราเปลี่ยน 0 เป็นค่าว่าง "" เพื่อให้ดูสะอาดตาที่สุดตามที่คุณต้องการ
+        df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{x:,}")
+        
+        column_configuration[c] = st.column_config.TextColumn(
             label=c,
-            format="%d", # แสดงเป็นจำนวนเต็ม
-            help="จัดกึ่งกลาง: เลข 0 จะถูกพรางสายตา"
+            help="จำนวนชิ้น (จัดกึ่งกลางอัตโนมัติ)"
         )
 
-    # 5. ใช้ Styler จัดการสีและตำแหน่ง (Alignment)
-    # เราเลือกเฉพาะคอลัมน์ qty_cols มาทำสีขาวตรงเลข 0
-    styled_df = df_display.style.applymap(highlight_zeros, subset=qty_cols)
-
-    # 6. แสดงผลตาราง
+    # 4. แสดงผลตาราง (ไม่ใช้ .style แล้วเพื่อป้องกัน Error ใน Pandas เวอร์ชันใหม่)
     st.dataframe(
-        styled_df, 
+        df_display, 
         column_config=column_configuration,
         use_container_width=True, 
         hide_index=True, 

@@ -141,15 +141,22 @@ def list_files_in_folder(service, folder_id: str) -> list[dict]:
 
 
 def download_file_to_buffer(service, file_id: str) -> io.BytesIO:
-    """ดาวน์โหลดไฟล์จาก Drive → BytesIO buffer"""
-    request = service.files().get_media(fileId=file_id)
-    buffer  = io.BytesIO()
-    downloader = MediaIoBaseDownload(buffer, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-    buffer.seek(0)
-    return buffer
+    """ดาวน์โหลดไฟล์จาก Drive → BytesIO buffer พร้อม retry 3 ครั้ง"""
+    for attempt in range(3):
+        try:
+            request    = service.files().get_media(fileId=file_id)
+            buffer     = io.BytesIO()
+            downloader = MediaIoBaseDownload(buffer, request, chunksize=10*1024*1024)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+            buffer.seek(0)
+            return buffer
+        except Exception as e:
+            if attempt == 2:
+                raise RuntimeError(f"ดาวน์โหลดไฟล์ไม่สำเร็จหลังลอง 3 ครั้ง: {e}")
+            import time
+            time.sleep(2)
 
 
 def find_file_buffer(service, files: list[dict], prefix: str) -> Optional[io.BytesIO]:

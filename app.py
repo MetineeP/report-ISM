@@ -787,51 +787,38 @@ if st.session_state.report_data is not None:
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
     
-    # 1. จัดการ floor_date_source: เปลี่ยน missing เป็นค่าว่าง (แก้ Error พื้นแดง)
+    # --- [ส่วนที่ต้องแก้ไข] ---
+    
+    # 1. จัดการ floor_date_source: ไม่ให้แสดง missing (แก้พื้นแดง)
     if "floor_date_source" in df_display.columns:
-        df_display["floor_date_source"] = df_display["floor_date_source"].replace("missing", "")
+        df_display["floor_date_source"] = df_display["floor_date_source"].replace(["missing", "Missing"], "")
 
-    # 2. จัดการ On Floor Date (วันที่)
+    # 2. จัดการ On Floor Date: แปลงเป็นข้อความวันที่เพื่อไม่ให้ NaT ทำระบบพัง
     if 'on_floor_date' in df_display.columns:
-        df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce')
+        df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
-    # 3. เตรียมข้อมูลและคัดแยกประเภทคอลัมน์
+    # 3. เตรียมกลุ่มคอลัมน์
     num_cols = df_display.select_dtypes(include=['number']).columns
     amt_keywords = ["cost", "price", "amt", "amount", "retail", "sales"]
     
-    # แยกกลุ่มคอลัมน์เงิน
-    amt_cols = [
-        c for c in num_cols 
-        if any(kw in c.lower() for kw in amt_keywords) or c in ["Standard Cost", "Active Sales Pricing"]
-    ]
-    # แยกกลุ่มคอลัมน์จำนวนชิ้น
+    amt_cols = [c for c in num_cols if any(kw in c.lower() for kw in amt_keywords) or c in ["Standard Cost", "Active Sales Pricing"]]
     qty_cols = [c for c in num_cols if c not in amt_cols]
 
-    # --- หัวใจสำคัญ: จัดการ format ก่อนนำไปแสดงผล ---
+    # 4. ตั้งค่าหน้าตาราง (Config)
     column_configuration = {}
 
-    # ตั้งค่ากลุ่มยอดเงิน (Amt): ให้ Streamlit จัดการให้ (ชิดขวาอัตโนมัติ + ลูกน้ำ)
+    # ตั้งค่ากลุ่มเงิน: ชิดขวา + มีคอมมา (ใช้ NumberColumn)
     for c in amt_cols:
         column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # ตั้งค่ากลุ่มจำนวน (Qty): แปลงเป็นขีด (-) และจัดกลาง
+    # ตั้งค่ากลุ่มจำนวน: เปลี่ยน 0 เป็นขีด และจัดกลาง (ใช้ TextColumn)
     for c in qty_cols:
-        df_display[c] = df_display[c].apply(lambda x: "-" if pd.isna(x) or x == 0 else f"{int(x):,}")
-        column_configuration[c] = st.column_config.TextColumn()
+        df_display[c] = df_display[c].fillna(0).astype(int).apply(lambda x: "-" if x == 0 else f"{x:,}")
+        column_configuration[c] = st.column_config.TextColumn(help="จัดกึ่งกลางอัตโนมัติ")
 
-    if 'on_floor_date' in df_display.columns:
-        column_configuration['on_floor_date'] = st.column_config.DateColumn(format="DD/MM/YYYY")
-
-    # 4. ใช้ Styler จัดการเฉพาะเรื่อง "ตำแหน่งวาง (Alignment)"
-    # เราไม่ใช้ Styler ในการแปลงค่าแล้ว เพื่อป้องกัน Error เดิม
-    styled_df = df_display.style.set_properties(
-        subset=[c for c in qty_cols if c in df_display.columns],
-        **{'text-align': 'center'}
-    )
-
-    # 5. แสดงผลตาราง
+    # 5. แสดงผล (*** ห้ามใช้ styled_df ให้ใช้ df_display ตรงๆ ***)
     st.dataframe(
-        styled_df, 
+        df_display, 
         column_config=column_configuration,
         use_container_width=True, 
         hide_index=True, 

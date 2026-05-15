@@ -216,7 +216,7 @@ def sanity_check(df_enriched: pd.DataFrame, df_soh: pd.DataFrame):
 # SECTION 5: Main
 # ============================================================
 if __name__ == "__main__":
-    DATA_FOLDER = "."
+    DATA_FOLDER = "data_cache" # ให้ตรงกับที่ app.py ใช้
 
     print("=" * 58)
     print("  PHASE 3 (Updated): Build Enriched Dataset")

@@ -678,7 +678,7 @@ def build_summary(df_report: pd.DataFrame, as_of_date: date) -> dict:
 # SECTION 5: Main — ทดสอบ
 # ============================================================
 if __name__ == "__main__":
-    DATA_FOLDER   = "."
+    DATA_FOLDER = "data_cache" # ให้ตรงกับที่ app.py ใช้
     OUTPUT_FOLDER = "."
     AS_OF_DATE    = date(2026, 5, 12)   # ← แก้วันที่ตาม as of ที่ต้องการทดสอบ
 

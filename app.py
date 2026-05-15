@@ -56,20 +56,14 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600&display=swap');
     html, body, [class*="css"] { font-family: 'IBM Plex Sans Thai', sans-serif; }
-    /* ซ่อนแค่เมนู Hamburger และ Footer แต่เก็บแถบ Header ไว้เพื่อให้ปุ่ม Sidebar ทำงานได้ */
-[data-testid="stSidebarCollapsedControl"] { display: block !important; }
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
+    #MainMenu, footer, header { visibility: hidden; }
     .stApp { background-color: #F4F6F9; }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0F2744 0%, #1B3F6B 100%);
     }
-    /* ปรับปรุง CSS selector เพื่อยกเว้นรูปภาพ */
-    section[data-testid="stSidebar"] *:not(img) {
-        color: #E2EAF4 !important;
-    }
+    section[data-testid="stSidebar"] * { color: #E2EAF4 !important; }
     section[data-testid="stSidebar"] hr { border-color: #2D527A; }
 
     /* KPI Card */
@@ -297,7 +291,9 @@ def run_sellthrough_report(buffers: dict, date_from: date, date_to: date) -> tup
         df_to       = load_transfer_order(tmpdir)
         df_transit  = get_qty_in_transit(df_to)
         df_fallback = get_floor_date_fallback(df_to)
-        df_sales    = load_sales_data(tmpdir)
+        # ส่ง buffer ตรงๆ ไม่ต้องผ่าน LibreOffice
+        sales_buf = buffers.get("sales")
+        df_sales    = load_sales_data(buffer=sales_buf)
         df_report   = calculate_sellthrough(
             df_items, df_ns, df_erply, df_to,
             df_transit, df_fallback, df_sales,
@@ -330,7 +326,6 @@ def run_accumulated_report(buffers: dict, date_from: date, date_to: date) -> tup
             "YMFINVENTORYONHANDREPORT_tmp.xlsx":            buffers.get("ns"),
             "Inventory_By_Items_tmp.xlsx":                  buffers.get("erply"),
             "YMFTRANSFERORDERBYITEMLISTResults_tmp.xlsx":  buffers.get("transfer"),
-            "YMFSALESDATAWITHCOSTResults_tmp.xlsx":        buffers.get("sales"),
         }
         for fname, buf in file_map.items():
             if buf:
@@ -344,7 +339,9 @@ def run_accumulated_report(buffers: dict, date_from: date, date_to: date) -> tup
         df_to       = load_transfer_order(tmpdir)
         df_transit  = get_qty_in_transit(df_to)
         df_fallback = get_floor_date_fallback(df_to)
-        df_sales    = load_sales_data(tmpdir)
+        # ส่ง buffer ตรงๆ ไม่ต้องผ่าน LibreOffice
+        sales_buf = buffers.get("sales")
+        df_sales    = load_sales_data(buffer=sales_buf)
         df_report   = calculate_accumulated(
             df_items, df_ns, df_erply,
             df_transit, df_fallback, df_sales,
@@ -739,45 +736,39 @@ if st.session_state.report_data is not None:
         # Location filter
         loc_col = "location" if "location" in df_report.columns else None
         if loc_col:
-            # ลบ ["ทั้งหมด"] ออก เหลือแค่ข้อมูลดิบๆ เลยครับ
-            locs = sorted(df_report[loc_col].dropna().unique().tolist())
-            sel_loc = st.multiselect("Location", locs)
+            locs = ["ทั้งหมด"] + sorted(df_report[loc_col].dropna().unique().tolist())
+            sel_loc = st.selectbox("Location", locs)
         else:
-            sel_loc = [] # ให้เป็น List ว่างแทนคำว่า "ทั้งหมด"
+            sel_loc = "ทั้งหมด"
 
     with col_f2:
         # Product Status filter
         if "Product Status" in df_report.columns:
-            statuses = sorted(df_report["Product Status"].dropna().unique().tolist())
-            sel_status = st.multiselect("Product Status", statuses)
+            statuses = ["ทั้งหมด"] + sorted(df_report["Product Status"].dropna().unique().tolist())
+            sel_status = st.selectbox("Product Status", statuses)
         else:
-            sel_status = []
+            sel_status = "ทั้งหมด"
 
     with col_f3:
         # Class filter
         if "Class" in df_report.columns:
-            classes = sorted(df_report["Class"].dropna().unique().tolist())
-            sel_class = st.multiselect("Class (Brand)", classes)
+            classes = ["ทั้งหมด"] + sorted(df_report["Class"].dropna().unique().tolist())
+            sel_class = st.selectbox("Class (Brand)", classes)
         else:
-            sel_class = []
+            sel_class = "ทั้งหมด"
 
     with col_f4:
+        # Search item code
         search = st.text_input("🔍 ค้นหา Item Code", placeholder="เช่น BL-1023943")
 
-    # --- Apply filters (ตัวตรรกะที่คุณเขียนมาถูกต้องแล้วครับ) ---
+    # Apply filters
     df_display = df_report.copy()
-    
-    # ถ้า sel_loc มีข้อมูล (User เลือกบางอย่าง) ให้กรองตามนั้น
-    if sel_loc and loc_col:
-        df_display = df_display[df_display[loc_col].isin(sel_loc)]
-        
-    if sel_status and "Product Status" in df_display.columns:
-        df_display = df_display[df_display["Product Status"].isin(sel_status)]
-        
-    if sel_class and "Class" in df_display.columns:
-        df_display = df_display[df_display["Class"].isin(sel_class)]
-        
-    # ค้นหาด้วยคีย์เวิร์ด (เหมือนเดิม)
+    if sel_loc != "ทั้งหมด" and loc_col:
+        df_display = df_display[df_display[loc_col] == sel_loc]
+    if sel_status != "ทั้งหมด" and "Product Status" in df_display.columns:
+        df_display = df_display[df_display["Product Status"] == sel_status]
+    if sel_class != "ทั้งหมด" and "Class" in df_display.columns:
+        df_display = df_display[df_display["Class"] == sel_class]
     if search:
         item_col = "item_code" if "item_code" in df_display.columns else "Material Code"
         if item_col in df_display.columns:
@@ -786,90 +777,7 @@ if st.session_state.report_data is not None:
             ]
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
-    
-    # 1. จัดการข้อมูลเบื้องต้น: ล้างคำว่า Error และจัดการวันที่
-    df_display = df_display.replace(["ERROR", "Error", "error", "missing", "Missing"], "")
-    
-    if 'on_floor_date' in df_display.columns:
-        df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
-
-    # --- ย่อชื่อหัวคอลัมน์ (ใส่เหมือนเดิมเลยครับ) ---
-    rename_map = {
-        "ALL (NS+Erply) Qty": "Total Qty",
-        "ALL (NS+Erply) Amt": "Total Amt",
-        "ALL (From NS) Qty":  "NS Qty",
-        "ALL (From NS) Amt":  "NS Amt",
-        "Cost Value":         "Cost",
-        "% of Item SOH":      "% SOH",
-        "Days Aged":          "Aged",
-        "Aging Category":     "Category"
-    }
-    for col in df_display.columns:
-        if "แต่ <=" in col and "Days" in col:
-            new_name = col.replace(">0 แต่ <=30", "1-30") \
-                          .replace(">30 แต่ <=60", "31-60") \
-                          .replace(">60 แต่ <=90", "61-90") \
-                          .replace(">90 แต่ <=120", "91-120") \
-                          .replace(">120 แต่ <=150", "121-150") \
-                          .replace(">150 แต่ <=180", "151-180") \
-                          .replace(">180 แต่ <=210", "181-210") \
-                          .replace(">210 แต่ <=240", "211-240") \
-                          .replace(">240 แต่ <=270", "241-270") \
-                          .replace(">270 แต่ <=300", "271-300") \
-                          .replace(">300 แต่ <=330", "301-330") \
-                          .replace(">330 แต่ <=360", "331-360")
-            rename_map[col] = new_name
-        elif ">360 Days" in col:
-            rename_map[col] = ">360 Days"
-            
-    df_display = df_display.rename(columns=rename_map)
-    # -------------------------------------------------------------
-
-    # 2. คัดแยกคอลัมน์ใหม่ให้เป๊ะกว่าเดิม
-    # 2.1 กลุ่มรหัสและข้อความ (ป้องกันการใส่ลูกน้ำ)
-    text_cols = ["item_code", "location", "source", "Product Status", "Class", "floor_date_source", "on_floor_date", "Product Number Reference", "Data Color"]
-
-    # 2.2 กลุ่มยอดเงิน (ชิดขวา, มีคอมมา) - เพิ่มเงื่อนไขให้ครอบคลุม "Pricing" และบังคับเอาชัวร์
-    right_align_cols = [c for c in df_display.columns if any(kw in c.lower() for kw in ["cost", "price", "pricing", "amt", "%", "sellthrough"]) and "ALL Amt" not in c]
-    # บังคับใส่ Active Sales Pricing และ Standard Cost ถ้ายังไม่เข้ากลุ่ม
-    for c in ["Standard Cost", "Active Sales Pricing"]:
-        if c in df_display.columns and c not in right_align_cols:
-            right_align_cols.append(c)
-
-    # 2.3 กลุ่มจำนวนชิ้น, Aging และ ALL Amt (ซ่อน 0, ไม่มีทศนิยม)
-    hide_zero_cols = [c for c in df_display.columns if c not in right_align_cols and c not in text_cols]
-
-    # 3. จัดการฟอร์แมตการแสดงผล (st.column_config)
-    column_configuration = {}
-
-    # --- จัดการรหัส: ตัด .0 ออก (ถ้าโปรแกรมแอบเติม) และแปลงเป็นข้อความ ---
-    for c in ["Product Number Reference", "Data Color"]:
-        if c in df_display.columns:
-            # สั่งบังคับให้เป็น Text แบบตัด .0 ทิ้ง จะได้ไม่มีคอมมาโผล่มา
-            df_display[c] = df_display[c].astype(str).str.replace(r'\.0$', '', regex=True).replace(['nan', 'None'], '')
-            column_configuration[c] = st.column_config.TextColumn()
-
-    # --- กลุ่ม Cost Value / Pricing / ยอดเงินอื่นๆ (ชิดขวา, มีลูกน้ำ) ---
-    for c in right_align_cols:
-        if c in df_display.columns:
-            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
-            column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
-
-    # --- กลุ่ม จำนวน / Aging / ALL Amt (ซ่อน 0) ---
-    for c in hide_zero_cols:
-        if c in df_display.columns:
-            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
-            df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{int(x):,}")
-            column_configuration[c] = st.column_config.TextColumn()
-
-    # 4. แสดงผลตาราง 
-    st.dataframe(
-        df_display, 
-        column_config=column_configuration,
-        use_container_width=True, 
-        hide_index=True, 
-        height=500
-    )
+    st.dataframe(df_display, use_container_width=True, hide_index=True, height=400)
 
     # Download button
     st.divider()

@@ -52,29 +52,51 @@ def _find_file(folder: str, prefix: str) -> str:
     raise FileNotFoundError(f"ไม่พบไฟล์ '{prefix}*.xls(x)' ใน {folder}")
 
 
-def load_sales_data(folder: str) -> pd.DataFrame:
+def _convert_xls_to_xlsx(xls_path: str, cache_dir: str = "/tmp") -> str:
+    """แปลง SpreadsheetML .xls → .xlsx ผ่าน LibreOffice"""
+    fname    = os.path.basename(xls_path)
+    xlsx_tmp = os.path.join(cache_dir, fname.replace(".xls", ".xlsx"))
+    if not os.path.exists(xlsx_tmp):
+        subprocess.run(
+            ["libreoffice", "--headless", "--convert-to", "xlsx",
+             "--outdir", cache_dir, os.path.abspath(xls_path)],
+            capture_output=True
+        )
+    if not os.path.exists(xlsx_tmp):
+        raise RuntimeError(f"LibreOffice แปลงไฟล์ล้มเหลว: {xls_path}")
+    return xlsx_tmp
+
+
+def load_sales_data(folder: str = None, buffer: "io.BytesIO | None" = None) -> pd.DataFrame:
     """
     โหลด YMFSALESDATAWITHCOSTResults
+    รับได้ทั้ง folder path (local) หรือ BytesIO buffer (จาก Google Drive)
     ตัด: Overall Total row, Sales Order, Return Authorization
-    รองรับทั้ง .xlsx ปกติ และ .xls (ซึ่งมักจะเป็น HTML ปลอมตัวมา)
     """
-    path = _find_file(folder, "YMFSALESDATAWITHCOSTResults")
-    
-    try:
-        # พยายามอ่านแบบปกติก่อน (ถ้าเป็น .xlsx ของจริง)
-        df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
-    except Exception:
-        # ถ้าพัง (มักจะเพราะเป็นไฟล์ .xls ที่ไส้ในเป็น HTML)
-        # ให้ใช้วิธีอ่าน HTML table โดยตรง
-        print(f"  [Sales] ตรวจพบไฟล์ .xls หรือ HTML fallback กำลังพยายามอ่านตาราง...")
-        dfs = pd.read_html(path, dtype={"Material Code": str})
-        df = dfs[0] # สมมติว่าตารางข้อมูลคือตารางแรกที่เจอในไฟล์ HTML
+    import io as _io
 
-    # ตรวจสอบว่าคอลัมน์สำคัญมีอยู่จริง
-    required_cols = ["Type", "Material Code", "Selling Date", "Quantity"]
-    missing_cols = [col for col in required_cols if col not in df.columns]
-    if missing_cols:
-        raise ValueError(f"ไม่พบคอลัมน์ที่ต้องการในไฟล์ Sales: {missing_cols}")
+    if buffer is not None:
+        # โหลดจาก buffer โดยตรง — ไม่ต้องแปลงไฟล์
+        buffer.seek(0)
+        # ลองอ่านด้วย openpyxl ก่อน (.xlsx) ถ้าไม่ได้ลอง xlrd (.xls)
+        try:
+            df = pd.read_excel(buffer, engine="openpyxl", dtype={"Material Code": str})
+        except Exception:
+            buffer.seek(0)
+            df = pd.read_excel(buffer, engine="xlrd", dtype={"Material Code": str})
+    else:
+        # โหลดจาก local folder
+        path = _find_file(folder, "YMFSALESDATAWITHCOSTResults")
+        if path.endswith(".xls"):
+            # SpreadsheetML xls — ใช้ xlrd แทน LibreOffice
+            try:
+                df = pd.read_excel(path, engine="xlrd", dtype={"Material Code": str})
+            except Exception:
+                # fallback: convert ด้วย LibreOffice ถ้า xlrd ไม่ได้
+                path = _convert_xls_to_xlsx(path)
+                df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
+        else:
+            df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
 
     # ตัด row ที่ไม่ใช่ transaction จริง
     df = df[df["Type"].isin(VALID_SALE_TYPES)].copy()
@@ -587,9 +609,8 @@ def build_sellthrough_summary(df_report: pd.DataFrame, date_from: date, date_to:
 # ============================================================
 
 if __name__ == "__main__":
-    # ส่วนการตั้งค่า (ปล่อยไว้ได้ครับ)
-    DATA_FOLDER   = "data_cache" 
-    OUTPUT_FOLDER = "."
+    DATA_FOLDER   = "/mnt/user-data/uploads"
+    OUTPUT_FOLDER = "/mnt/user-data/outputs"
     DATE_FROM     = date(2026, 1, 1)
     DATE_TO       = date(2026, 5, 13)
 
@@ -597,27 +618,24 @@ if __name__ == "__main__":
     print("  PHASE 5: Sell-through Report")
     print("=" * 58 + "\n")
 
-    # --- ตั้งแต่บรรทัดนี้ลงไป ให้ใส่ # ปิดให้หมดทุกบรรทัดครับ ---
-    # df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
-    # df_transit  = get_qty_in_transit(df_to)
-    # df_fallback = get_floor_date_fallback(df_to)
-    # df_sales    = load_sales_data(DATA_FOLDER)
+    df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
+    df_transit  = get_qty_in_transit(df_to)
+    df_fallback = get_floor_date_fallback(df_to)
+    df_sales    = load_sales_data(DATA_FOLDER)
 
-    # df_report = calculate_sellthrough(
-    #     df_items, df_ns, df_erply, df_to,
-    #     df_transit, df_fallback, df_sales,
-    #     DATE_FROM, DATE_TO,
-    # )
+    df_report = calculate_sellthrough(
+        df_items, df_ns, df_erply, df_to,
+        df_transit, df_fallback, df_sales,
+        DATE_FROM, DATE_TO,
+    )
 
-    # summary = build_sellthrough_summary(df_report, DATE_FROM, DATE_TO)
-    # print(f"\n=== Summary ===")
-    # for k, v in summary.items():
-    #     if k not in ["top10_sellers","low_sellthrough"]:
-    #         print(f"  {k:<20} = {v}")
-    # print(f"\nTop 10:\n{summary['top10_sellers'].to_string(index=False)}")
-    # print(f"\nLow Sell-through:\n{summary['low_sellthrough'].to_string(index=False)}")
+    summary = build_sellthrough_summary(df_report, DATE_FROM, DATE_TO)
+    print(f"\n=== Summary ===")
+    for k, v in summary.items():
+        if k not in ["top10_sellers","low_sellthrough"]:
+            print(f"  {k:<20} = {v}")
+    print(f"\nTop 10:\n{summary['top10_sellers'].to_string(index=False)}")
+    print(f"\nLow Sell-through:\n{summary['low_sellthrough'].to_string(index=False)}")
 
-    # fname = export_sellthrough_excel(df_report, DATE_FROM, DATE_TO, OUTPUT_FOLDER)
-    # print(f"\n[DONE] Phase 5 เสร็จ → {fname}")
-
-    print("\n[READY] Phase 5 is ready for Streamlit Cloud")
+    fname = export_sellthrough_excel(df_report, DATE_FROM, DATE_TO, OUTPUT_FOLDER)
+    print(f"\n[DONE] Phase 5 เสร็จ → {fname}")

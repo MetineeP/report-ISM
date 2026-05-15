@@ -512,8 +512,9 @@ def build_accumulated_summary(df_report: pd.DataFrame, date_from: date, date_to:
 # ============================================================
 
 if __name__ == "__main__":
-    DATA_FOLDER   = "/mnt/user-data/uploads"
-    OUTPUT_FOLDER = "/mnt/user-data/outputs"
+    # เปลี่ยนให้มาชี้ที่โฟลเดอร์ชั่วคราวที่ app.py เตรียมไว้ให้
+    DATA_FOLDER   = "data_cache" 
+    OUTPUT_FOLDER = "."
     DATE_FROM     = date(2026, 1, 1)
     DATE_TO       = date(2026, 5, 13)
 

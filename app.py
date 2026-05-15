@@ -787,51 +787,70 @@ if st.session_state.report_data is not None:
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
     
-# 1. ล้างค่า ERROR, missing และจัดการวันที่
+    # 1. จัดการข้อมูลเบื้องต้น
     df_display = df_display.replace(["ERROR", "Error", "error", "missing", "Missing"], "")
-    
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
-    # 2. แยกกลุ่มคอลัมน์ตามที่คุณต้องการ
+    # 2. แยกกลุ่มคอลัมน์ตามความต้องการ
     num_cols = df_display.select_dtypes(include=['number']).columns
     
-    # 2.1 คอลัมน์ที่ต้องการ "ชิดขวา" (Cost Value และกลุ่มเงินอื่นๆ)
+    # กลุ่มชิดขวา (Cost Value, Price, % ต่างๆ)
     right_align_cols = ["Cost Value", "Standard Cost", "Active Sales Pricing"]
     right_align_cols.extend([c for c in num_cols if ("%" in c or "Amt" in c) and c != "ALL (NS+Erply) Amt"])
     
-    # 2.2 คอลัมน์ Aging Buckets (ที่มีคำว่า Days)
+    # กลุ่ม Aging
     aging_cols = [c for c in df_display.columns if "Days" in c]
     
-    # 2.3 คอลัมน์ที่ต้องการ "ซ่อน 0 และตัดทศนิยม" (จำนวนชิ้น, Aging, ALL Amt)
-    hide_zero_cols = [c for c in num_cols if c not in right_align_cols]
-    hide_zero_cols.extend([c for c in aging_cols if c in df_display.columns and c not in hide_zero_cols])
-    if "ALL (NS+Erply) Amt" in df_display.columns and "ALL (NS+Erply) Amt" not in hide_zero_cols:
-        hide_zero_cols.append("ALL (NS+Erply) Amt")
+    # กลุ่มกึ่งกลาง (จำนวนชิ้น, Aging, ALL Amt)
+    center_cols = [c for c in num_cols if c not in right_align_cols]
+    if "ALL (NS+Erply) Amt" in df_display.columns and "ALL (NS+Erply) Amt" not in center_cols:
+        center_cols.append("ALL (NS+Erply) Amt")
 
-    # 3. ตั้งค่าหน้าตาราง (Config)
-    column_configuration = {}
+    # 3. สร้างฟังก์ชันจัด Format ตัวเลข (ซ่อน 0, ใส่คอมมา, ลบทศนิยม)
+    def format_qty(val):
+        if pd.isna(val) or str(val).strip() in ["", "0", "0.0"]: return ""
+        try: return f"{int(float(val)):,}"
+        except: return str(val)
 
-    # --- กลุ่ม Cost Value (ชิดขวา, มีคอมมา, ไม่มีทศนิยม) ---
+    def format_amt(val):
+        if pd.isna(val) or val == "": return ""
+        try: return f"{int(float(val)):,}"
+        except: return str(val)
+
+    format_dict = {c: format_qty for c in center_cols if c in df_display.columns}
     for c in right_align_cols:
         if c in df_display.columns:
-            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
-            column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
+            format_dict[c] = format_amt
 
-    # --- กลุ่ม จำนวน / Aging / ALL Amt (ซ่อนเลข 0, ไม่มีทศนิยม) ---
-    for c in hide_zero_cols:
-        if c in df_display.columns:
-            # เปลี่ยน 0 เป็นค่าว่าง "" เพื่อพรางตา และปัดเศษเป็นจำนวนเต็ม
-            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
-            df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{int(x):,}")
-            
-            # ใช้ TextColumn 
-            column_configuration[c] = st.column_config.TextColumn()
+    # 4. ตั้งค่าสีหัวคอลัมน์ (Table Styles)
+    # พื้นฐาน: หัวตารางสีน้ำเงิน ฟอนต์ขาว
+    th_styles = [
+        {'selector': 'th.col_heading', 'props': [('background-color', '#1B3F6B'), ('color', '#ffffff'), ('text-align', 'center')]}
+    ]
+    
+    # ไล่โทนสีสำหรับ Aging (เขียว -> เหลือง -> แดง)
+    gradient_colors = ['#28a745', '#8bc34a', '#cddc39', '#ffc107', '#fd7e14', '#dc3545', '#c82333', '#a71d2a']
+    aging_idx = 0
+    for i, col in enumerate(df_display.columns):
+        if col in aging_cols:
+            color = gradient_colors[min(aging_idx, len(gradient_colors)-1)]
+            th_styles.append({
+                'selector': f'th.col_heading.level0.col{i}', 
+                'props': [('background-color', color), ('color', '#ffffff'), ('text-align', 'center')]
+            })
+            aging_idx += 1
 
-    # 4. แสดงผลตาราง
+    # 5. ประกอบร่าง Styler (จัดตำแหน่ง ซ่อน 0 เทสี)
+    styled_df = (df_display.style
+                 .format(format_dict)
+                 .set_properties(subset=[c for c in center_cols if c in df_display.columns], **{'text-align': 'center'})
+                 .set_properties(subset=[c for c in right_align_cols if c in df_display.columns], **{'text-align': 'right'})
+                 .set_table_styles(th_styles))
+
+    # 6. แสดงผลด้วย st.dataframe (ลบ column_config ตัวปัญหาออกทั้งหมด)
     st.dataframe(
-        df_display, 
-        column_config=column_configuration,
+        styled_df,
         use_container_width=True, 
         hide_index=True, 
         height=500

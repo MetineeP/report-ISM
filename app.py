@@ -118,15 +118,16 @@ SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
 @st.cache_resource
 def get_drive_service():
-    """สร้าง Google Drive service จาก Streamlit secrets"""
+    """สร้าง Google Drive service จาก Streamlit secrets (optional)"""
     try:
+        if "gcp_service_account" not in st.secrets:
+            return None
         creds_info = dict(st.secrets["gcp_service_account"])
         creds = service_account.Credentials.from_service_account_info(
             creds_info, scopes=SCOPES
         )
         return build("drive", "v3", credentials=creds, cache_discovery=False)
-    except Exception as e:
-        st.error(f"❌ ไม่สามารถเชื่อมต่อ Google Drive: {e}")
+    except Exception:
         return None
 
 
@@ -647,12 +648,67 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # --- Run button ---
-    run_btn = st.button("▶ Run Report", type="primary", use_container_width=True)
-    st.caption("⏱ ใช้เวลาประมาณ 1-3 นาที\nขึ้นอยู่กับขนาดของข้อมูล")
+    # --- File Uploader ---
+    st.markdown("#### 📂 อัปโหลดไฟล์ข้อมูล")
+    st.caption(
+        "อัปโหลดไฟล์ดิบจากระบบ NetSuite และ Erply\n"
+        "รองรับ .xlsx และ .xls\n"
+        "ชื่อไฟล์ไม่ต้องแก้ไข วางได้เลย"
+    )
+
+    uploaded_files = st.file_uploader(
+        label="เลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)",
+        type=["xlsx", "xls"],
+        accept_multiple_files=True,
+        label_visibility="collapsed",
+    )
+
+    # แสดงสถานะไฟล์ที่ต้องการ
+    REQUIRED_PREFIXES = {
+        "items":    ("Items",                          "Items Master"),
+        "ns":       ("YMFINVENTORYONHANDREPORT",       "NS On Hand"),
+        "erply":    ("Inventory By Items",             "Erply Inventory"),
+        "transfer": ("YMFTRANSFERORDERBYITEMLISTResults", "Transfer Order"),
+        "sales":    ("YMFSALESDATAWITHCOSTResults",   "Sales Data"),
+    }
+
+    # match ไฟล์ที่ upload กับ required prefixes
+    def match_uploads(uploaded_files):
+        matched = {}
+        for key, (prefix, label) in REQUIRED_PREFIXES.items():
+            for f in uploaded_files:
+                if f.name.startswith(prefix):
+                    matched[key] = f
+                    break
+        return matched
+
+    if uploaded_files:
+        matched = match_uploads(uploaded_files)
+        for key, (prefix, label) in REQUIRED_PREFIXES.items():
+            if key in matched:
+                st.markdown(f"✅ {label}")
+            else:
+                st.markdown(f"⬜ {label} *(ยังไม่ได้อัปโหลด)*")
+    else:
+        for key, (prefix, label) in REQUIRED_PREFIXES.items():
+            st.markdown(f"⬜ {label}")
 
     st.markdown("---")
-    st.caption(f"📁 raw_data folder\n`...{st.secrets.get('GDRIVE_RAW_DATA_FOLDER_ID', 'N/A')[-12:]}`")
+
+    # --- Run button ---
+    files_ready = bool(uploaded_files) and len(match_uploads(uploaded_files)) >= 3
+    run_btn = st.button(
+        "▶ Run Report",
+        type="primary",
+        use_container_width=True,
+        disabled=not files_ready,
+    )
+    if not files_ready and uploaded_files:
+        st.caption("⚠️ กรุณาอัปโหลดไฟล์ให้ครบอย่างน้อย 3 ไฟล์หลัก")
+    elif not uploaded_files:
+        st.caption("⬆️ อัปโหลดไฟล์ก่อนแล้วกด Run Report")
+    else:
+        st.caption("⏱ ใช้เวลาประมาณ 1-3 นาที\nขึ้นอยู่กับขนาดของข้อมูล")
 
 
 # ============================================================
@@ -667,25 +723,31 @@ st.divider()
 
 # Session state สำหรับเก็บผลลัพธ์
 if "report_data" not in st.session_state:
-    st.session_state.report_data   = None
+    st.session_state.report_data    = None
     st.session_state.report_summary = None
-    st.session_state.report_type   = None
-    st.session_state.report_params = {}
+    st.session_state.report_type    = None
+    st.session_state.report_params  = {}
+
+# --- แปลง uploaded files เป็น buffers ---
+def build_buffers_from_uploads(uploaded_files: list) -> dict:
+    """แปลง st.uploaded_files เป็น dict ของ BytesIO buffers"""
+    import io as _io
+    matched = match_uploads(uploaded_files)
+    buffers = {}
+    for key, f in matched.items():
+        buf = _io.BytesIO(f.read())
+        buf.seek(0)
+        buffers[key] = buf
+    return buffers
 
 # Run
 if run_btn:
-    FOLDER_ID = st.secrets.get("GDRIVE_RAW_DATA_FOLDER_ID", "1f1ids90cV_CmqSRyWgUEhR9epVed87sG")
+    buffers = build_buffers_from_uploads(uploaded_files)
 
-    with st.spinner("⏳ กำลังโหลดข้อมูลจาก Google Drive..."):
-        result = load_raw_data_from_drive(FOLDER_ID)
-        if not result:
-            st.error("❌ โหลดข้อมูลไม่ได้ กรุณาตรวจสอบ Google Drive folder")
-            st.stop()
-        buffers, file_names = result
-        # Debug: แสดงชื่อไฟล์จริงที่เจอใน Drive
-        with st.expander("🔍 ไฟล์ที่พบใน Google Drive (คลิกเพื่อดู)", expanded=False):
-            for fn in file_names:
-                st.text(f"  • {fn}")
+    # แสดงไฟล์ที่ upload
+    with st.expander("🔍 ไฟล์ที่อัปโหลด (คลิกเพื่อดู)", expanded=False):
+        for f in uploaded_files:
+            st.text(f"  • {f.name}  ({f.size/1024:.0f} KB)")
 
     try:
         if report_choice == "Inventory Aging":

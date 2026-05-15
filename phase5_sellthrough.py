@@ -56,9 +56,18 @@ def _convert_xls_to_xlsx(xls_path: str, cache_dir: str = "/tmp") -> str:
     """แปลง SpreadsheetML .xls → .xlsx ผ่าน LibreOffice"""
     fname    = os.path.basename(xls_path)
     xlsx_tmp = os.path.join(cache_dir, fname.replace(".xls", ".xlsx"))
+    
+    # --- [ส่วนที่เพิ่มใหม่: หา Path ของ LibreOffice แบบฉลาด] ---
+    libreoffice_exe = r"C:\Program Files\LibreOffice\program\soffice.exe"
+    if not os.path.exists(libreoffice_exe):
+        libreoffice_exe = r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"
+    if not os.path.exists(libreoffice_exe):
+        libreoffice_exe = "libreoffice" # Fallback เผื่อรันบน Linux/Cloud
+    # --------------------------------------------------------
+
     if not os.path.exists(xlsx_tmp):
         subprocess.run(
-            ["libreoffice", "--headless", "--convert-to", "xlsx",
+            [libreoffice_exe, "--headless", "--convert-to", "xlsx",
              "--outdir", cache_dir, os.path.abspath(xls_path)],
             capture_output=True
         )
@@ -76,14 +85,26 @@ def load_sales_data(folder: str = None, buffer: "io.BytesIO | None" = None) -> p
     import io as _io
 
     if buffer is not None:
-        # โหลดจาก buffer โดยตรง — ไม่ต้องแปลงไฟล์
+        # โหลดจาก buffer โดยตรง
         buffer.seek(0)
-        # ลองอ่านด้วย openpyxl ก่อน (.xlsx) ถ้าไม่ได้ลอง xlrd (.xls)
         try:
+            # ลอง openpyxl ก่อน (.xlsx)
             df = pd.read_excel(buffer, engine="openpyxl", dtype={"Material Code": str})
         except Exception:
+            # ถ้าไม่ได้ — เป็น SpreadsheetML .xls → บันทึกลง temp แล้วแปลงด้วย LibreOffice
+            import tempfile, shutil, subprocess as _sp
             buffer.seek(0)
-            df = pd.read_excel(buffer, engine="xlrd", dtype={"Material Code": str})
+            with tempfile.NamedTemporaryFile(suffix=".xls", delete=False) as tmp:
+                tmp.write(buffer.read())
+                tmp_path = tmp.name
+            xlsx_path = tmp_path.replace(".xls", ".xlsx")
+            _sp.run(["libreoffice", "--headless", "--convert-to", "xlsx",
+                     "--outdir", os.path.dirname(tmp_path), tmp_path],
+                    capture_output=True)
+            df = pd.read_excel(xlsx_path, engine="openpyxl", dtype={"Material Code": str})
+            os.unlink(tmp_path)
+            try: os.unlink(xlsx_path)
+            except: pass
     else:
         # โหลดจาก local folder
         path = _find_file(folder, "YMFSALESDATAWITHCOSTResults")

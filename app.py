@@ -793,7 +793,7 @@ if st.session_state.report_data is not None:
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
-    # --- [ส่วนที่ต้องนำไปแทนที่จุดเปลี่ยนชื่อเดิม] ---
+    # --- ย่อชื่อหัวคอลัมน์ (ใส่เหมือนเดิมเลยครับ) ---
     rename_map = {
         "ALL (NS+Erply) Qty": "Total Qty",
         "ALL (NS+Erply) Amt": "Total Amt",
@@ -804,11 +804,8 @@ if st.session_state.report_data is not None:
         "Days Aged":          "Aged",
         "Aging Category":     "Category"
     }
-    
-    # ย่อชื่อคอลัมน์ Aging ให้สั้นที่สุด
     for col in df_display.columns:
         if "แต่ <=" in col and "Days" in col:
-            # แปลง ">0 แต่ <=30 Days" เป็น "1-30 Days"
             new_name = col.replace(">0 แต่ <=30", "1-30") \
                           .replace(">30 แต่ <=60", "31-60") \
                           .replace(">60 แต่ <=90", "61-90") \
@@ -828,33 +825,44 @@ if st.session_state.report_data is not None:
     df_display = df_display.rename(columns=rename_map)
     # -------------------------------------------------------------
 
-    # 2. คัดแยกคอลัมน์ (ใช้เงื่อนไขจากชื่อคอลัมน์ใหม่)
-    # กลุ่มเงินและเปอร์เซ็นต์ (ชิดขวา, มีคอมมา) - ยกเว้น ALL Amt เพราะคุณอยากให้ตรงกลาง
-    right_align_cols = [c for c in df_display.columns if any(kw in c for kw in ["Cost", "Price", "Amt", "%", "sellthrough"]) and "ALL Amt" not in c]
-    
-    # กลุ่มจำนวนชิ้น, Aging และ ALL Amt (ซ่อน 0, ไม่มีทศนิยม)
-    text_cols = ["item_code", "location", "source", "Product Status", "Class", "floor_date_source", "on_floor_date"]
+    # 2. คัดแยกคอลัมน์ใหม่ให้เป๊ะกว่าเดิม
+    # 2.1 กลุ่มรหัสและข้อความ (ป้องกันการใส่ลูกน้ำ)
+    text_cols = ["item_code", "location", "source", "Product Status", "Class", "floor_date_source", "on_floor_date", "Product Number Reference", "Data Color"]
+
+    # 2.2 กลุ่มยอดเงิน (ชิดขวา, มีคอมมา) - เพิ่มเงื่อนไขให้ครอบคลุม "Pricing" และบังคับเอาชัวร์
+    right_align_cols = [c for c in df_display.columns if any(kw in c.lower() for kw in ["cost", "price", "pricing", "amt", "%", "sellthrough"]) and "ALL Amt" not in c]
+    # บังคับใส่ Active Sales Pricing และ Standard Cost ถ้ายังไม่เข้ากลุ่ม
+    for c in ["Standard Cost", "Active Sales Pricing"]:
+        if c in df_display.columns and c not in right_align_cols:
+            right_align_cols.append(c)
+
+    # 2.3 กลุ่มจำนวนชิ้น, Aging และ ALL Amt (ซ่อน 0, ไม่มีทศนิยม)
     hide_zero_cols = [c for c in df_display.columns if c not in right_align_cols and c not in text_cols]
 
-    # 3. จัดการฟอร์แมตและการแสดงผลด้วย st.column_config
+    # 3. จัดการฟอร์แมตการแสดงผล (st.column_config)
     column_configuration = {}
 
-    # --- กลุ่ม Cost Value และเงินอื่นๆ ---
+    # --- จัดการรหัส: ตัด .0 ออก (ถ้าโปรแกรมแอบเติม) และแปลงเป็นข้อความ ---
+    for c in ["Product Number Reference", "Data Color"]:
+        if c in df_display.columns:
+            # สั่งบังคับให้เป็น Text แบบตัด .0 ทิ้ง จะได้ไม่มีคอมมาโผล่มา
+            df_display[c] = df_display[c].astype(str).str.replace(r'\.0$', '', regex=True).replace(['nan', 'None'], '')
+            column_configuration[c] = st.column_config.TextColumn()
+
+    # --- กลุ่ม Cost Value / Pricing / ยอดเงินอื่นๆ (ชิดขวา, มีลูกน้ำ) ---
     for c in right_align_cols:
         if c in df_display.columns:
             df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
             column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # --- กลุ่ม จำนวน / Aging / ALL Amt ---
+    # --- กลุ่ม จำนวน / Aging / ALL Amt (ซ่อน 0) ---
     for c in hide_zero_cols:
         if c in df_display.columns:
-            # ปัดเป็นจำนวนเต็ม และเปลี่ยน 0 ให้เป็นค่าว่าง "" (ซ่อน 0)
             df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
             df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{int(x):,}")
-            
             column_configuration[c] = st.column_config.TextColumn()
 
-    # 4. แสดงผลตาราง (ใช้ df_display ตรงๆ เสถียร 100%)
+    # 4. แสดงผลตาราง 
     st.dataframe(
         df_display, 
         column_config=column_configuration,

@@ -785,54 +785,49 @@ if st.session_state.report_data is not None:
                 df_display[item_col].str.contains(search, case=False, na=False)
             ]
 
-st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
+    st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
     
-    # --- เริ่มต้นส่วนที่ปรับแต่งตารางใหม่ ---
-    
-    # 1. จัดการ floor_date_source ไม่ให้แสดง "missing" (เปลี่ยนเป็นค่าว่าง เพื่อไม่ให้ขึ้นสีแดง Error)
+    # 1. จัดการ floor_date_source: เปลี่ยน missing เป็นค่าว่าง (แก้ Error พื้นแดง)
     if "floor_date_source" in df_display.columns:
-        df_display["floor_date_source"] = df_display["floor_date_source"].replace("missing", None)
+        df_display["floor_date_source"] = df_display["floor_date_source"].replace("missing", "")
 
-    # 2. จัดการ On Floor Date (ถ้ามี) ให้แสดงเป็นวันที่สวยๆ
+    # 2. จัดการ On Floor Date
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce')
 
-    # 3. แยกประเภทคอลัมน์ตัวเลข (เงิน vs จำนวนชิ้น) เพื่อปรับ Format 
+    # 3. แยกประเภทคอลัมน์ตัวเลข (เงิน vs จำนวนชิ้น)
     num_cols = df_display.select_dtypes(include=['number']).columns
-
-    # สร้าง Keyword เพื่อดักจับคอลัมน์ที่เป็นจำนวนเงิน
     amt_keywords = ["cost", "price", "amt", "amount", "retail", "sales"]
+    
+    # ระบุคอลัมน์ที่เป็นเงิน (ชิดขวาอัตโนมัติ)
     amt_cols = [
         c for c in num_cols 
         if any(kw in c.lower() for kw in amt_keywords) or c in ["Standard Cost", "Active Sales Pricing"]
     ]
-    # คอลัมน์ตัวเลขที่เหลือจะถือว่าเป็น "จำนวนชิ้น" (Qty)
+    # คอลัมน์ที่เหลือคือจำนวนชิ้น (เดี๋ยวจะจัดวางกึ่งกลาง)
     qty_cols = [c for c in num_cols if c not in amt_cols]
 
     column_configuration = {}
 
-    # 3.1 คอลัมน์ "จำนวนเงิน" (Amt): จัดชิดขวา (ค่า default ของ NumberColumn) และใส่ลูกน้ำ (,)
+    # 3.1 ฟอร์แมตยอดเงิน: ใส่ลูกน้ำ + ชิดขวา
     for c in amt_cols:
-        # หากต้องการให้มีทศนิยม 2 ตำแหน่งด้วย สามารถเปลี่ยนเป็น format="%,.2f" ได้ครับ
-        column_configuration[c] = st.column_config.NumberColumn(format="%,d") 
+        column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # 3.2 คอลัมน์ "จำนวนชิ้น" (Qty): แปลงเป็น string เพื่อใส่ "-" แทน 0 และใส่ลูกน้ำ
+    # 3.2 ฟอร์แมตจำนวนชิ้น: ถ้า 0 หรือว่างให้ใส่ "-"
     for c in qty_cols:
         df_display[c] = df_display[c].apply(lambda x: "-" if pd.isna(x) or x == 0 else f"{int(x):,}")
-        # ให้ Streamlit มองเป็น Text เพื่อไม่ให้ไปฝืนเรื่อง Number format
         column_configuration[c] = st.column_config.TextColumn()
 
-    # 3.3 คอลัมน์ "วันที่"
     if 'on_floor_date' in df_display.columns:
         column_configuration['on_floor_date'] = st.column_config.DateColumn(format="DD/MM/YYYY")
 
-    # 4. ใช้ Pandas Styler เพื่อบังคับให้คอลัมน์จำนวนชิ้น (Qty) จัดอยู่ตรงกลาง (Center)
+    # 4. ใช้ Styler บังคับให้จำนวนชิ้น (qty_cols) จัดวางกึ่งกลาง (Center)
     styled_df = df_display.style.set_properties(
         subset=[c for c in qty_cols if c in df_display.columns],
         **{'text-align': 'center'}
     )
 
-    # 5. แสดงผลตาราง
+    # 5. แสดงผลตาราง (ใช้ styled_df แทน df_display)
     st.dataframe(
         styled_df, 
         column_config=column_configuration,
@@ -840,7 +835,6 @@ st.caption(f"แสดง {len(df_display):,} รายการ จากทั
         hide_index=True, 
         height=400
     )
-    # --- สิ้นสุดส่วนที่ปรับแต่งตารางใหม่ ---
 
     # Download button
     st.divider()

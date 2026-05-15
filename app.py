@@ -787,48 +787,50 @@ if st.session_state.report_data is not None:
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
     
-    # 1. จัดการคำว่า ERROR และข้อมูลวันที่
-    # ล้างคำว่า ERROR ออกจากทุกคอลัมน์ให้กลายเป็นค่าว่าง
+    # 1. ล้างค่า ERROR และจัดการวันที่ (เหมือนเดิม)
     df_display = df_display.replace(["ERROR", "Error", "error"], "")
-    
-    if "floor_date_source" in df_display.columns:
-        df_display["floor_date_source"] = df_display["floor_date_source"].replace(["missing", "Missing"], "")
-
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
     # 2. แยกกลุ่มคอลัมน์ (เงิน vs จำนวนชิ้น)
     num_cols = df_display.select_dtypes(include=['number']).columns
-    # กรองเฉพาะคอลัมน์ที่เป็นเงินหรือเปอร์เซ็นต์ (เพื่อให้ชิดขวาเหมือนเดิม)
     amt_pc_keywords = ["cost", "price", "amt", "amount", "retail", "sales", "%", "pct", "sellthrough"]
-    
     amt_pc_cols = [c for c in num_cols if any(kw in c.lower() for kw in amt_pc_keywords) or c in ["Standard Cost", "Active Sales Pricing"]]
-    # คอลัมน์ที่เหลือ (เช่น Aging buckets ในรูป) จะถูกมองว่าเป็นจำนวนชิ้น
     qty_cols = [c for c in num_cols if c not in amt_pc_cols]
 
-    # 3. ตั้งค่าหน้าตาราง (Config)
-    column_configuration = {}
+    # 3. สร้างฟังก์ชันพรางสายตาเลข 0 (Conditional Formatting)
+    # เราจะใช้ Styler เพื่อทำให้เลข 0 เป็นสีขาวและจัดกึ่งกลาง
+    def highlight_zeros(val):
+        try:
+            # ถ้าค่าเป็น 0 หรือ 0.0 ให้ใช้สีฟอนต์ขาว (พรางสายตา)
+            if float(val) == 0:
+                return 'color: white; text-align: center;'
+            # ถ้ามียอด ให้จัดกึ่งกลางปกติ
+            return 'text-align: center;'
+        except:
+            return 'text-align: center;'
 
-    # ตั้งค่ากลุ่มเงิน/เปอร์เซ็นต์: ชิดขวา + มีคอมมา
+    # 4. ตั้งค่าหน้าตาราง (Config)
+    column_configuration = {}
     for c in amt_pc_cols:
         column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # ตั้งค่ากลุ่มจำนวนชิ้น (รวม Aging buckets): ไม่มีทศนิยม, 0 เป็นขีด, และจัดกลาง
     for c in qty_cols:
-        # แปลงข้อมูลใน df_display ให้เป็น "ข้อความ" เพื่อใส่ขีด (-) และจัดกลางได้ง่าย
+        # แปลงข้อมูลเป็นเลขจำนวนเต็ม (กำจัด .0)
         df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0).astype(int)
-        df_display[c] = df_display[c].apply(lambda x: "-" if x == 0 else f"{x:,}")
-        
-        column_configuration[c] = st.column_config.TextColumn(
+        column_configuration[c] = st.column_config.NumberColumn(
             label=c,
-            help="จำนวนชิ้น (จัดกึ่งกลาง)",
-            width="medium"
+            format="%d", # แสดงเป็นจำนวนเต็ม
+            help="จัดกึ่งกลาง: เลข 0 จะถูกพรางสายตา"
         )
 
-    # 4. แสดงผลตาราง (ไม่ใช้ styled_df เพื่อป้องกัน Error เดิม)
-    # ใช้การจัดกึ่งกลางผ่าน HTML/CSS เฉพาะคอลัมน์ Qty
+    # 5. ใช้ Styler จัดการสีและตำแหน่ง (Alignment)
+    # เราเลือกเฉพาะคอลัมน์ qty_cols มาทำสีขาวตรงเลข 0
+    styled_df = df_display.style.applymap(highlight_zeros, subset=qty_cols)
+
+    # 6. แสดงผลตาราง
     st.dataframe(
-        df_display, 
+        styled_df, 
         column_config=column_configuration,
         use_container_width=True, 
         hide_index=True, 

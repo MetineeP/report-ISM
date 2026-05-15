@@ -791,29 +791,30 @@ if st.session_state.report_data is not None:
     if "floor_date_source" in df_display.columns:
         df_display["floor_date_source"] = df_display["floor_date_source"].replace("missing", "")
 
-    # 2. จัดการ On Floor Date
+    # 2. จัดการ On Floor Date (วันที่)
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce')
 
-    # 3. แยกประเภทคอลัมน์ตัวเลข (เงิน vs จำนวนชิ้น)
+    # 3. เตรียมข้อมูลและคัดแยกประเภทคอลัมน์
     num_cols = df_display.select_dtypes(include=['number']).columns
     amt_keywords = ["cost", "price", "amt", "amount", "retail", "sales"]
     
-    # ระบุคอลัมน์ที่เป็นเงิน (ชิดขวาอัตโนมัติ)
+    # แยกกลุ่มคอลัมน์เงิน
     amt_cols = [
         c for c in num_cols 
         if any(kw in c.lower() for kw in amt_keywords) or c in ["Standard Cost", "Active Sales Pricing"]
     ]
-    # คอลัมน์ที่เหลือคือจำนวนชิ้น (เดี๋ยวจะจัดวางกึ่งกลาง)
+    # แยกกลุ่มคอลัมน์จำนวนชิ้น
     qty_cols = [c for c in num_cols if c not in amt_cols]
 
+    # --- หัวใจสำคัญ: จัดการ format ก่อนนำไปแสดงผล ---
     column_configuration = {}
 
-    # 3.1 ฟอร์แมตยอดเงิน: ใส่ลูกน้ำ + ชิดขวา
+    # ตั้งค่ากลุ่มยอดเงิน (Amt): ให้ Streamlit จัดการให้ (ชิดขวาอัตโนมัติ + ลูกน้ำ)
     for c in amt_cols:
         column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # 3.2 ฟอร์แมตจำนวนชิ้น: ถ้า 0 หรือว่างให้ใส่ "-"
+    # ตั้งค่ากลุ่มจำนวน (Qty): แปลงเป็นขีด (-) และจัดกลาง
     for c in qty_cols:
         df_display[c] = df_display[c].apply(lambda x: "-" if pd.isna(x) or x == 0 else f"{int(x):,}")
         column_configuration[c] = st.column_config.TextColumn()
@@ -821,13 +822,14 @@ if st.session_state.report_data is not None:
     if 'on_floor_date' in df_display.columns:
         column_configuration['on_floor_date'] = st.column_config.DateColumn(format="DD/MM/YYYY")
 
-    # 4. ใช้ Styler บังคับให้จำนวนชิ้น (qty_cols) จัดวางกึ่งกลาง (Center)
+    # 4. ใช้ Styler จัดการเฉพาะเรื่อง "ตำแหน่งวาง (Alignment)"
+    # เราไม่ใช้ Styler ในการแปลงค่าแล้ว เพื่อป้องกัน Error เดิม
     styled_df = df_display.style.set_properties(
         subset=[c for c in qty_cols if c in df_display.columns],
         **{'text-align': 'center'}
     )
 
-    # 5. แสดงผลตาราง (ใช้ styled_df แทน df_display)
+    # 5. แสดงผลตาราง
     st.dataframe(
         styled_df, 
         column_config=column_configuration,

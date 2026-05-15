@@ -793,23 +793,37 @@ if st.session_state.report_data is not None:
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
-    # --- [ส่วนที่เพิ่มมา] เปลี่ยนชื่อหัวคอลัมน์ให้สั้นลงและขึ้นบรรทัดใหม่ (\n) ---
+    # --- [ส่วนที่ต้องนำไปแทนที่จุดเปลี่ยนชื่อเดิม] ---
     rename_map = {
-        "ALL (NS+Erply) Qty": "ALL Qty\n(NS+Erply)",
-        "ALL (NS+Erply) Amt": "ALL Amt\n(NS+Erply)",
-        "ALL (From NS) Qty":  "ALL Qty\n(From NS)",
-        "ALL (From NS) Amt":  "ALL Amt\n(From NS)",
-        "Cost Value":         "Cost\nValue",
-        "% of Item SOH":      "%\nItem SOH",
-        "Days Aged":          "Days\nAged",
-        "Aging Category":     "Aging\nCategory"
+        "ALL (NS+Erply) Qty": "Total Qty",
+        "ALL (NS+Erply) Amt": "Total Amt",
+        "ALL (From NS) Qty":  "NS Qty",
+        "ALL (From NS) Amt":  "NS Amt",
+        "Cost Value":         "Cost",
+        "% of Item SOH":      "% SOH",
+        "Days Aged":          "Aged",
+        "Aging Category":     "Category"
     }
     
-    # วนลูปย่อชื่อคอลัมน์ Aging (เช่น ">0 แต่ <=30 Days" -> ">0 - 30\nDays")
+    # ย่อชื่อคอลัมน์ Aging ให้สั้นที่สุด
     for col in df_display.columns:
         if "แต่ <=" in col and "Days" in col:
-            new_name = col.replace(" แต่ <=", " - ").replace(" Days", "\nDays")
+            # แปลง ">0 แต่ <=30 Days" เป็น "1-30 Days"
+            new_name = col.replace(">0 แต่ <=30", "1-30") \
+                          .replace(">30 แต่ <=60", "31-60") \
+                          .replace(">60 แต่ <=90", "61-90") \
+                          .replace(">90 แต่ <=120", "91-120") \
+                          .replace(">120 แต่ <=150", "121-150") \
+                          .replace(">150 แต่ <=180", "151-180") \
+                          .replace(">180 แต่ <=210", "181-210") \
+                          .replace(">210 แต่ <=240", "211-240") \
+                          .replace(">240 แต่ <=270", "241-270") \
+                          .replace(">270 แต่ <=300", "271-300") \
+                          .replace(">300 แต่ <=330", "301-330") \
+                          .replace(">330 แต่ <=360", "331-360")
             rename_map[col] = new_name
+        elif ">360 Days" in col:
+            rename_map[col] = ">360 Days"
             
     df_display = df_display.rename(columns=rename_map)
     # -------------------------------------------------------------

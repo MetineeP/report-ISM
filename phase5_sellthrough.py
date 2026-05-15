@@ -52,31 +52,29 @@ def _find_file(folder: str, prefix: str) -> str:
     raise FileNotFoundError(f"ไม่พบไฟล์ '{prefix}*.xls(x)' ใน {folder}")
 
 
-def _convert_xls_to_xlsx(xls_path: str, cache_dir: str = "/tmp") -> str:
-    """แปลง SpreadsheetML .xls → .xlsx ผ่าน LibreOffice"""
-    fname    = os.path.basename(xls_path)
-    xlsx_tmp = os.path.join(cache_dir, fname.replace(".xls", ".xlsx"))
-    if not os.path.exists(xlsx_tmp):
-        subprocess.run(
-            ["libreoffice", "--headless", "--convert-to", "xlsx",
-             "--outdir", cache_dir, os.path.abspath(xls_path)],
-            capture_output=True
-        )
-    if not os.path.exists(xlsx_tmp):
-        raise RuntimeError(f"LibreOffice แปลงไฟล์ล้มเหลว: {xls_path}")
-    return xlsx_tmp
-
-
 def load_sales_data(folder: str) -> pd.DataFrame:
     """
     โหลด YMFSALESDATAWITHCOSTResults
     ตัด: Overall Total row, Sales Order, Return Authorization
+    รองรับทั้ง .xlsx ปกติ และ .xls (ซึ่งมักจะเป็น HTML ปลอมตัวมา)
     """
     path = _find_file(folder, "YMFSALESDATAWITHCOSTResults")
-    if path.endswith(".xls"):
-        path = _convert_xls_to_xlsx(path)
+    
+    try:
+        # พยายามอ่านแบบปกติก่อน (ถ้าเป็น .xlsx ของจริง)
+        df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
+    except Exception:
+        # ถ้าพัง (มักจะเพราะเป็นไฟล์ .xls ที่ไส้ในเป็น HTML)
+        # ให้ใช้วิธีอ่าน HTML table โดยตรง
+        print(f"  [Sales] ตรวจพบไฟล์ .xls หรือ HTML fallback กำลังพยายามอ่านตาราง...")
+        dfs = pd.read_html(path, dtype={"Material Code": str})
+        df = dfs[0] # สมมติว่าตารางข้อมูลคือตารางแรกที่เจอในไฟล์ HTML
 
-    df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
+    # ตรวจสอบว่าคอลัมน์สำคัญมีอยู่จริง
+    required_cols = ["Type", "Material Code", "Selling Date", "Quantity"]
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"ไม่พบคอลัมน์ที่ต้องการในไฟล์ Sales: {missing_cols}")
 
     # ตัด row ที่ไม่ใช่ transaction จริง
     df = df[df["Type"].isin(VALID_SALE_TYPES)].copy()

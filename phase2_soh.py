@@ -76,10 +76,37 @@ def is_valid_sku(code: str) -> bool:
 # ============================================================
 
 def _find_file(folder: str, prefix: str) -> str:
-    matches = glob.glob(os.path.join(folder, f"{prefix}*.xlsx"))
-    if not matches:
-        raise FileNotFoundError(f"ไม่พบไฟล์ '{prefix}*.xlsx' ใน {folder}")
-    return sorted(matches)[0]
+    # ให้ค้นหาทั้ง .xlsx และ .xls
+    for ext in ["*.xlsx", "*.xls"]:
+        matches = glob.glob(os.path.join(folder, f"{prefix}{ext}"))
+        if matches:
+            return sorted(matches)[0]
+    raise FileNotFoundError(f"ไม่พบไฟล์ '{prefix}*.xls(x)' ใน {folder}")
+
+def _read_magic(path: str, skiprows: int = 0, dtype: dict = None) -> pd.DataFrame:
+    """ฟังก์ชันฉลาด: ลองอ่านแบบ Excel ก่อน ถ้าพังให้อ่านแบบ HTML"""
+    try:
+        return pd.read_excel(path, skiprows=skiprows, engine="openpyxl", dtype=dtype)
+    except Exception:
+        print(f"  [Fallback] ไฟล์ {os.path.basename(path)} เป็น HTML ปลอมตัวมา กำลังแกะข้อมูล...")
+        dfs = pd.read_html(path, extract_links=None)
+        
+        # NetSuite มักจะเอาชื่อรายงานไปไว้ในตารางด้วย เราเลยต้องตัดแถวขยะออก (เหมือน skiprows)
+        df = dfs[0]
+        if skiprows > 0:
+            # เอาแถวที่บรรทัดหัวตารางมาเป็น Header ใหม่
+            df.columns = df.iloc[skiprows - 1] 
+            df = df.iloc[skiprows:].reset_index(drop=True)
+            
+            # ลบคอลัมน์ที่เป็น NaN (ที่เกิดจาก HTML เปล่าๆ)
+            df = df.loc[:, df.columns.notna()]
+            
+        # บังคับ dtype ตามที่ขอ (เช่น ทำให้ Item Code เป็น Text)
+        if dtype:
+            for col, t in dtype.items():
+                if col in df.columns:
+                    df[col] = df[col].astype(t)
+        return df
 
 
 def load_items(folder: str) -> pd.DataFrame:

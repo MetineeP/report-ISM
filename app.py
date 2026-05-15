@@ -793,12 +793,32 @@ if st.session_state.report_data is not None:
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
-    # 2. คัดแยกคอลัมน์อย่างปลอดภัย
-    # กลุ่มเงินและเปอร์เซ็นต์ (ชิดขวา, มีคอมมา)
-    right_align_cols = [c for c in df_display.columns if any(kw in c for kw in ["Cost", "Price", "Amt", "%", "sellthrough"]) and c != "ALL (NS+Erply) Amt"]
+    # --- [ส่วนที่เพิ่มมา] เปลี่ยนชื่อหัวคอลัมน์ให้สั้นลงและขึ้นบรรทัดใหม่ (\n) ---
+    rename_map = {
+        "ALL (NS+Erply) Qty": "ALL Qty\n(NS+Erply)",
+        "ALL (NS+Erply) Amt": "ALL Amt\n(NS+Erply)",
+        "ALL (From NS) Qty":  "ALL Qty\n(From NS)",
+        "ALL (From NS) Amt":  "ALL Amt\n(From NS)",
+        "Cost Value":         "Cost\nValue",
+        "% of Item SOH":      "%\nItem SOH",
+        "Days Aged":          "Days\nAged",
+        "Aging Category":     "Aging\nCategory"
+    }
+    
+    # วนลูปย่อชื่อคอลัมน์ Aging (เช่น ">0 แต่ <=30 Days" -> ">0 - 30\nDays")
+    for col in df_display.columns:
+        if "แต่ <=" in col and "Days" in col:
+            new_name = col.replace(" แต่ <=", " - ").replace(" Days", "\nDays")
+            rename_map[col] = new_name
+            
+    df_display = df_display.rename(columns=rename_map)
+    # -------------------------------------------------------------
+
+    # 2. คัดแยกคอลัมน์ (ใช้เงื่อนไขจากชื่อคอลัมน์ใหม่)
+    # กลุ่มเงินและเปอร์เซ็นต์ (ชิดขวา, มีคอมมา) - ยกเว้น ALL Amt เพราะคุณอยากให้ตรงกลาง
+    right_align_cols = [c for c in df_display.columns if any(kw in c for kw in ["Cost", "Price", "Amt", "%", "sellthrough"]) and "ALL Amt" not in c]
     
     # กลุ่มจำนวนชิ้น, Aging และ ALL Amt (ซ่อน 0, ไม่มีทศนิยม)
-    # คัดคอลัมน์ที่เป็น Text พื้นฐานออกไปก่อน
     text_cols = ["item_code", "location", "source", "Product Status", "Class", "floor_date_source", "on_floor_date"]
     hide_zero_cols = [c for c in df_display.columns if c not in right_align_cols and c not in text_cols]
 
@@ -808,22 +828,19 @@ if st.session_state.report_data is not None:
     # --- กลุ่ม Cost Value และเงินอื่นๆ ---
     for c in right_align_cols:
         if c in df_display.columns:
-            # ทำให้ชัวร์ว่าเป็นตัวเลข
             df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
-            # ใช้ NumberColumn จะบังคับชิดขวาให้เอง
             column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # --- กลุ่ม จำนวน / Aging / ALL (NS+Erply) Amt ---
+    # --- กลุ่ม จำนวน / Aging / ALL Amt ---
     for c in hide_zero_cols:
         if c in df_display.columns:
             # ปัดเป็นจำนวนเต็ม และเปลี่ยน 0 ให้เป็นค่าว่าง "" (ซ่อน 0)
             df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
             df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{int(x):,}")
             
-            # เมื่อเราแปลงเป็นค่าว่าง ข้อมูลจะกลายเป็น Text ซึ่ง Streamlit มักจะจัดชิดซ้ายให้
             column_configuration[c] = st.column_config.TextColumn()
 
-    # 4. แสดงผลตาราง (ใช้ df_display ตรงๆ ห้ามใช้ .style เด็ดขาด)
+    # 4. แสดงผลตาราง (ใช้ df_display ตรงๆ เสถียร 100%)
     st.dataframe(
         df_display, 
         column_config=column_configuration,

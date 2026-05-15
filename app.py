@@ -787,40 +787,48 @@ if st.session_state.report_data is not None:
 
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
     
-    # 1. จัดการคำว่า ERROR และข้อมูลวันที่ (เหมือนเดิม)
-    df_display = df_display.replace(["ERROR", "Error", "error"], "")
+# 1. ล้างค่า ERROR, missing และจัดการวันที่
+    df_display = df_display.replace(["ERROR", "Error", "error", "missing", "Missing"], "")
+    
     if 'on_floor_date' in df_display.columns:
         df_display['on_floor_date'] = pd.to_datetime(df_display['on_floor_date'], errors='coerce').dt.strftime('%d/%m/%Y').fillna("-")
 
-    # 2. แยกกลุ่มคอลัมน์ (เงิน vs จำนวนชิ้น)
+    # 2. แยกกลุ่มคอลัมน์ตามที่คุณต้องการ
     num_cols = df_display.select_dtypes(include=['number']).columns
-    amt_pc_keywords = ["cost", "price", "amt", "amount", "retail", "sales", "%", "pct", "sellthrough"]
-    amt_pc_cols = [c for c in num_cols if any(kw in c.lower() for kw in amt_pc_keywords) or c in ["Standard Cost", "Active Sales Pricing"]]
-    qty_cols = [c for c in num_cols if c not in amt_pc_cols]
+    
+    # 2.1 คอลัมน์ที่ต้องการ "ชิดขวา" (Cost Value และกลุ่มเงินอื่นๆ)
+    right_align_cols = ["Cost Value", "Standard Cost", "Active Sales Pricing"]
+    right_align_cols.extend([c for c in num_cols if ("%" in c or "Amt" in c) and c != "ALL (NS+Erply) Amt"])
+    
+    # 2.2 คอลัมน์ Aging Buckets (ที่มีคำว่า Days)
+    aging_cols = [c for c in df_display.columns if "Days" in c]
+    
+    # 2.3 คอลัมน์ที่ต้องการ "ซ่อน 0 และตัดทศนิยม" (จำนวนชิ้น, Aging, ALL Amt)
+    hide_zero_cols = [c for c in num_cols if c not in right_align_cols]
+    hide_zero_cols.extend([c for c in aging_cols if c in df_display.columns and c not in hide_zero_cols])
+    if "ALL (NS+Erply) Amt" in df_display.columns and "ALL (NS+Erply) Amt" not in hide_zero_cols:
+        hide_zero_cols.append("ALL (NS+Erply) Amt")
 
     # 3. ตั้งค่าหน้าตาราง (Config)
     column_configuration = {}
 
-    # ตั้งค่ากลุ่มยอดเงิน: ชิดขวา + มีคอมมา
-    for c in amt_pc_cols:
-        column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
+    # --- กลุ่ม Cost Value (ชิดขวา, มีคอมมา, ไม่มีทศนิยม) ---
+    for c in right_align_cols:
+        if c in df_display.columns:
+            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
+            column_configuration[c] = st.column_config.NumberColumn(format="%,.0f")
 
-    # ตั้งค่ากลุ่มจำนวน (Aging Buckets): 
-    # เราจะใช้วิธีเปลี่ยน 0 เป็นค่าว่าง "" เพื่อให้สายตาโฟกัสเฉพาะช่องที่มีตัวเลข
-    for c in qty_cols:
-        # แปลงเป็นจำนวนเต็มก่อน
-        df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0).astype(int)
-        
-        # ใช้ TextColumn เพื่อให้แสดงค่าว่างหรือขีดได้ตามต้องการ และจัดกึ่งกลาง
-        # หมายเหตุ: เราเปลี่ยน 0 เป็นค่าว่าง "" เพื่อให้ดูสะอาดตาที่สุดตามที่คุณต้องการ
-        df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{x:,}")
-        
-        column_configuration[c] = st.column_config.TextColumn(
-            label=c,
-            help="จำนวนชิ้น (จัดกึ่งกลางอัตโนมัติ)"
-        )
+    # --- กลุ่ม จำนวน / Aging / ALL Amt (ซ่อนเลข 0, ไม่มีทศนิยม) ---
+    for c in hide_zero_cols:
+        if c in df_display.columns:
+            # เปลี่ยน 0 เป็นค่าว่าง "" เพื่อพรางตา และปัดเศษเป็นจำนวนเต็ม
+            df_display[c] = pd.to_numeric(df_display[c], errors='coerce').fillna(0)
+            df_display[c] = df_display[c].apply(lambda x: "" if x == 0 else f"{int(x):,}")
+            
+            # ใช้ TextColumn 
+            column_configuration[c] = st.column_config.TextColumn()
 
-    # 4. แสดงผลตาราง (ไม่ใช้ .style แล้วเพื่อป้องกัน Error ใน Pandas เวอร์ชันใหม่)
+    # 4. แสดงผลตาราง
     st.dataframe(
         df_display, 
         column_config=column_configuration,

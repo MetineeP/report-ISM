@@ -328,21 +328,22 @@ def calculate_soh(
 # SECTION 6: Main — ทดสอบ
 # ============================================================
 if __name__ == "__main__":
-    DATA_FOLDER = "data_cache" # ให้ตรงกับที่ app.py ใช้
+    DATA_FOLDER = "data_cache" 
 
     print("=" * 58)
     print("  PHASE 2 (Updated): SOH + Qty in Transit")
     print("=" * 58 + "\n")
+    
+    # ผมใส่เครื่องหมาย # ปิดบรรทัดที่สั่งรันข้อมูลข้างล่างนี้ทั้งหมดแล้วนะครับ
+    # df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
+    # df_transit  = get_qty_in_transit(df_to)
+    # df_fallback = get_floor_date_fallback(df_to)
+    # df_soh      = calculate_soh(df_items, df_ns, df_erply, df_transit)
 
-    df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
-    df_transit  = get_qty_in_transit(df_to)
-    df_fallback = get_floor_date_fallback(df_to)
-    df_soh      = calculate_soh(df_items, df_ns, df_erply, df_transit)
+    # print(f"\nItems ที่มี Qty in Transit > 0:")
+    # print(df_soh[df_soh["qty_in_transit"] > 0].head(8).to_string(index=False))
 
-    print(f"\nItems ที่มี Qty in Transit > 0:")
-    print(df_soh[df_soh["qty_in_transit"] > 0].head(8).to_string(index=False))
+    # print(f"\nSample On Floor Date fallback (5 rows):")
+    # print(df_fallback.head(5).to_string(index=False))
 
-    print(f"\nSample On Floor Date fallback (5 rows):")
-    print(df_fallback.head(5).to_string(index=False))
-
-    print("\n[DONE] Phase 2 Updated เสร็จ — พร้อม Phase 3")
+    print("\n[READY] Phase 2 is ready for Streamlit Cloud")

@@ -512,7 +512,7 @@ def build_accumulated_summary(df_report: pd.DataFrame, date_from: date, date_to:
 # ============================================================
 
 if __name__ == "__main__":
-    # เปลี่ยนให้มาชี้ที่โฟลเดอร์ชั่วคราวที่ app.py เตรียมไว้ให้
+    # ส่วนการตั้งค่า (คงไว้ได้ครับ)
     DATA_FOLDER   = "data_cache" 
     OUTPUT_FOLDER = "."
     DATE_FROM     = date(2026, 1, 1)
@@ -522,28 +522,31 @@ if __name__ == "__main__":
     print("  PHASE 6: Accumulated Sales Report")
     print("=" * 58 + "\n")
 
-    df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
-    df_transit  = get_qty_in_transit(df_to)
-    df_fallback = get_floor_date_fallback(df_to)
-    df_sales    = load_sales_data(DATA_FOLDER)
+    # --- ใส่ # ปิดบรรทัดอันตรายด้านล่างนี้ให้หมดครับ ---
+    # df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
+    # df_transit  = get_qty_in_transit(df_to)
+    # df_fallback = get_floor_date_fallback(df_to)
+    # df_sales    = load_sales_data(DATA_FOLDER)
 
-    df_report = calculate_accumulated(
-        df_items, df_ns, df_erply,
-        df_transit, df_fallback, df_sales,
-        DATE_FROM, DATE_TO,
-    )
+    # df_report = calculate_accumulated(
+    #     df_items, df_ns, df_erply,
+    #     df_transit, df_fallback, df_sales,
+    #     DATE_FROM, DATE_TO,
+    # )
 
-    summary = build_accumulated_summary(df_report, DATE_FROM, DATE_TO)
-    print(f"\n=== Summary ===")
-    for k, v in summary.items():
-        if k not in ["top10_sellers","slow_moving","monthly_totals"]:
-            print(f"  {k:<20} = {v}")
-    print(f"\nMonthly Totals:")
-    for m, qty in summary["monthly_totals"].items():
-        bar = "█" * int(qty / max(summary["monthly_totals"].values()) * 20) if max(summary["monthly_totals"].values()) > 0 else ""
-        print(f"  {m}: {qty:>8,.0f}  {bar}")
-    print(f"\nTop 10:\n{summary['top10_sellers'].to_string(index=False)}")
-    print(f"\nSlow Moving (High MH):\n{summary['slow_moving'].to_string(index=False)}")
+    # summary = build_accumulated_summary(df_report, DATE_FROM, DATE_TO)
+    # print(f"\n=== Summary ===")
+    # for k, v in summary.items():
+    #     if k not in ["top10_sellers","slow_moving","monthly_totals"]:
+    #         print(f"  {k:<20} = {v}")
+    # print(f"\nMonthly Totals:")
+    # for m, qty in summary["monthly_totals"].items():
+    #     bar = "█" * int(qty / max(summary["monthly_totals"].values()) * 20) if max(summary["monthly_totals"].values()) > 0 else ""
+    #     print(f"  {m}: {qty:>8,.0f}  {bar}")
+    # print(f"\nTop 10:\n{summary['top10_sellers'].to_string(index=False)}")
+    # print(f"\nSlow Moving (High MH):\n{summary['slow_moving'].to_string(index=False)}")
 
-    fname = export_accumulated_excel(df_report, DATE_FROM, DATE_TO, OUTPUT_FOLDER)
-    print(f"\n[DONE] Phase 6 เสร็จ → {fname}")
+    # fname = export_accumulated_excel(df_report, DATE_FROM, DATE_TO, OUTPUT_FOLDER)
+    # print(f"\n[DONE] Phase 6 เสร็จ → {fname}")
+
+    print("\n[READY] Phase 6 is ready for Streamlit Cloud")

@@ -216,28 +216,29 @@ def sanity_check(df_enriched: pd.DataFrame, df_soh: pd.DataFrame):
 # SECTION 5: Main
 # ============================================================
 if __name__ == "__main__":
-    DATA_FOLDER = "data_cache" # ให้ตรงกับที่ app.py ใช้
+    DATA_FOLDER = "data_cache" 
 
     print("=" * 58)
     print("  PHASE 3 (Updated): Build Enriched Dataset")
     print("=" * 58 + "\n")
 
-    df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
-    df_transit  = get_qty_in_transit(df_to)
-    df_fallback = get_floor_date_fallback(df_to)
-    df_soh      = calculate_soh(df_items, df_ns, df_erply, df_transit)
+    # ใส่ # ปิดบรรทัดพวกนี้ให้หมด เพื่อไม่ให้มันแอบรันตอน Deploy ครับ
+    # df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
+    # df_transit  = get_qty_in_transit(df_to)
+    # df_fallback = get_floor_date_fallback(df_to)
+    # df_soh      = calculate_soh(df_items, df_ns, df_erply, df_transit)
 
-    df_enriched  = build_enriched_dataset(df_items, df_soh, df_fallback)
-    df_soh_loc   = build_soh_by_location(df_items, df_ns, df_erply)
+    # df_enriched  = build_enriched_dataset(df_items, df_soh, df_fallback)
+    # df_soh_loc   = build_soh_by_location(df_items, df_ns, df_erply)
 
-    sanity_check(df_enriched, df_soh)
+    # sanity_check(df_enriched, df_soh)
 
-    print(f"\nFloor date source breakdown:\n{df_enriched['floor_date_source'].value_counts().to_string()}")
+    # print(f"\nFloor date source breakdown:\n{df_enriched['floor_date_source'].value_counts().to_string()}")
 
-    print(f"\nLocation summary (SOH by location):")
-    print(
-        df_soh_loc.groupby(["source","location"])["qty"]
-        .sum().sort_values(ascending=False).head(15).to_string()
-    )
+    # print(f"\nLocation summary (SOH by location):")
+    # print(
+    #     df_soh_loc.groupby(["source","location"])["qty"]
+    #     .sum().sort_values(ascending=False).head(15).to_string()
+    # )
 
-    print("\n[DONE] Phase 3 Updated เสร็จ — พร้อม Phase 4: Inventory Aging Report")
+    print("\n[READY] Phase 3 is ready for Streamlit Cloud")

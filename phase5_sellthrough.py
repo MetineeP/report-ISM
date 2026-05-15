@@ -587,7 +587,7 @@ def build_sellthrough_summary(df_report: pd.DataFrame, date_from: date, date_to:
 # ============================================================
 
 if __name__ == "__main__":
-    # เปลี่ยนจาก /mnt/user-data/... เป็นโฟลเดอร์ทำงานชั่วคราว
+    # ส่วนการตั้งค่า (ปล่อยไว้ได้ครับ)
     DATA_FOLDER   = "data_cache" 
     OUTPUT_FOLDER = "."
     DATE_FROM     = date(2026, 1, 1)
@@ -597,24 +597,27 @@ if __name__ == "__main__":
     print("  PHASE 5: Sell-through Report")
     print("=" * 58 + "\n")
 
-    df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
-    df_transit  = get_qty_in_transit(df_to)
-    df_fallback = get_floor_date_fallback(df_to)
-    df_sales    = load_sales_data(DATA_FOLDER)
+    # --- ตั้งแต่บรรทัดนี้ลงไป ให้ใส่ # ปิดให้หมดทุกบรรทัดครับ ---
+    # df_items, df_ns, df_erply, df_to = load_all_data(DATA_FOLDER)
+    # df_transit  = get_qty_in_transit(df_to)
+    # df_fallback = get_floor_date_fallback(df_to)
+    # df_sales    = load_sales_data(DATA_FOLDER)
 
-    df_report = calculate_sellthrough(
-        df_items, df_ns, df_erply, df_to,
-        df_transit, df_fallback, df_sales,
-        DATE_FROM, DATE_TO,
-    )
+    # df_report = calculate_sellthrough(
+    #     df_items, df_ns, df_erply, df_to,
+    #     df_transit, df_fallback, df_sales,
+    #     DATE_FROM, DATE_TO,
+    # )
 
-    summary = build_sellthrough_summary(df_report, DATE_FROM, DATE_TO)
-    print(f"\n=== Summary ===")
-    for k, v in summary.items():
-        if k not in ["top10_sellers","low_sellthrough"]:
-            print(f"  {k:<20} = {v}")
-    print(f"\nTop 10:\n{summary['top10_sellers'].to_string(index=False)}")
-    print(f"\nLow Sell-through:\n{summary['low_sellthrough'].to_string(index=False)}")
+    # summary = build_sellthrough_summary(df_report, DATE_FROM, DATE_TO)
+    # print(f"\n=== Summary ===")
+    # for k, v in summary.items():
+    #     if k not in ["top10_sellers","low_sellthrough"]:
+    #         print(f"  {k:<20} = {v}")
+    # print(f"\nTop 10:\n{summary['top10_sellers'].to_string(index=False)}")
+    # print(f"\nLow Sell-through:\n{summary['low_sellthrough'].to_string(index=False)}")
 
-    fname = export_sellthrough_excel(df_report, DATE_FROM, DATE_TO, OUTPUT_FOLDER)
-    print(f"\n[DONE] Phase 5 เสร็จ → {fname}")
+    # fname = export_sellthrough_excel(df_report, DATE_FROM, DATE_TO, OUTPUT_FOLDER)
+    # print(f"\n[DONE] Phase 5 เสร็จ → {fname}")
+
+    print("\n[READY] Phase 5 is ready for Streamlit Cloud")

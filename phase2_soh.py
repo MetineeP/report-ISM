@@ -163,6 +163,18 @@ def load_transfer_order(folder: str) -> pd.DataFrame:
     print(f"  [TransferOrder] {len(df):,} rows | {os.path.basename(path)}")
     return df
 
+# ==========================================
+# ⬇️ ก๊อปปี้ชุดนี้ไปวางแทรกตรงนี้ได้เลยครับ ⬇️
+# ==========================================
+def load_all_data(folder: str):
+    """คืน tuple: (df_items, df_ns, df_erply, df_to)"""
+    print("[load_all_data] กำลังโหลดไฟล์ทั้ง 4 ตัว...")
+    df_items = load_items(folder)
+    df_ns    = load_ns_onhand(folder)
+    df_erply = load_erply(folder)
+    df_to    = load_transfer_order(folder)
+    print()
+    return df_items, df_ns, df_erply, df_to
 
 # ============================================================
 # SECTION 3: Derive Qty in Transit per Item

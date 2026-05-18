@@ -768,11 +768,6 @@ def build_buffers_from_uploads(uploaded_files: list) -> dict:
 if run_btn:
     buffers = build_buffers_from_uploads(uploaded_files)
 
-    # แสดงไฟล์ที่ upload
-    with st.expander("🔍 ไฟล์ที่อัปโหลด (คลิกเพื่อดู)", expanded=False):
-        for f in uploaded_files:
-            st.text(f"  • {f.name}  ({f.size/1024:.0f} KB)")
-
     try:
         if report_choice == "Inventory Aging":
             with st.spinner("⏳ กำลังคำนวณ Inventory Aging..."):

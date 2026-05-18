@@ -74,9 +74,9 @@ def is_valid_sku(code: str) -> bool:
 # ============================================================
 # SECTION 2: File Loaders
 # ============================================================
+import io
 
 def _find_file(folder: str, prefix: str) -> str:
-    # ให้ค้นหาทั้ง .xlsx และ .xls
     for ext in ["*.xlsx", "*.xls"]:
         matches = glob.glob(os.path.join(folder, f"{prefix}{ext}"))
         if matches:
@@ -84,63 +84,59 @@ def _find_file(folder: str, prefix: str) -> str:
     raise FileNotFoundError(f"ไม่พบไฟล์ '{prefix}*.xls(x)' ใน {folder}")
 
 def _read_magic(path: str, skiprows: int = 0, dtype: dict = None) -> pd.DataFrame:
-    """ฟังก์ชันฉลาด: ลองอ่านแบบ Excel ก่อน ถ้าพังให้อ่านแบบ HTML"""
+    """ฟังก์ชันฉลาด: ลองอ่าน .xlsx ก่อน -> ลอง .xls จริง -> ถ้าพังให้อ่านแบบ HTML (NetSuite)"""
     try:
         return pd.read_excel(path, skiprows=skiprows, engine="openpyxl", dtype=dtype)
     except Exception:
-        print(f"  [Fallback] ไฟล์ {os.path.basename(path)} เป็น HTML ปลอมตัวมา กำลังแกะข้อมูล...")
-        dfs = pd.read_html(path, extract_links=None)
+        pass
         
-        # NetSuite มักจะเอาชื่อรายงานไปไว้ในตารางด้วย เราเลยต้องตัดแถวขยะออก (เหมือน skiprows)
-        df = dfs[0]
-        if skiprows > 0:
-            # เอาแถวที่บรรทัดหัวตารางมาเป็น Header ใหม่
-            df.columns = df.iloc[skiprows - 1] 
-            df = df.iloc[skiprows:].reset_index(drop=True)
-            
-            # ลบคอลัมน์ที่เป็น NaN (ที่เกิดจาก HTML เปล่าๆ)
-            df = df.loc[:, df.columns.notna()]
-            
-        # บังคับ dtype ตามที่ขอ (เช่น ทำให้ Item Code เป็น Text)
-        if dtype:
-            for col, t in dtype.items():
-                if col in df.columns:
-                    df[col] = df[col].astype(t)
-        return df
+    try:
+        return pd.read_excel(path, skiprows=skiprows, engine="xlrd", dtype=dtype)
+    except Exception:
+        pass
 
+    print(f"  [Fallback] ไฟล์ {os.path.basename(path)} เป็น HTML ปลอมตัวมา กำลังแกะข้อมูล...")
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        html_content = f.read()
+        
+    dfs = pd.read_html(io.StringIO(html_content), extract_links=None)
+    df = dfs[0]
+    
+    if skiprows > 0:
+        df.columns = df.iloc[skiprows - 1] 
+        df = df.iloc[skiprows:].reset_index(drop=True)
+        df = df.loc[:, df.columns.notna()]
+        
+    if dtype:
+        for col, t in dtype.items():
+            if col in df.columns:
+                df[col] = df[col].astype(t)
+    return df
 
 def load_items(folder: str) -> pd.DataFrame:
     path = _find_file(folder, "Items")
-    df = pd.read_excel(path, engine="openpyxl",
-                       dtype={"Item Code": str, "Item Erply ID TH": str})
+    df = _read_magic(path, skiprows=0, dtype={"Item Code": str, "Item Erply ID TH": str})
     df["Item Code"]           = df["Item Code"].str.strip()
     df["Active Sales Pricing"] = pd.to_numeric(df["Active Sales Pricing"], errors="coerce")
     df["Standard Cost"]        = pd.to_numeric(df["Standard Cost"],        errors="coerce")
     df["On Floor Date"]        = pd.to_datetime(df["On Floor Date"],        errors="coerce")
-    # ตัด Item Code ที่ไม่ตรง SKU format มาตรฐาน
     df = df[df["Item Code"].apply(is_valid_sku)].copy()
     print(f"  [Items]         {len(df):,} rows | {os.path.basename(path)}")
     return df
 
-
 def load_ns_onhand(folder: str) -> pd.DataFrame:
     path = _find_file(folder, "YMFINVENTORYONHANDREPORT")
-    # skiprows=5: ข้าม company name / report title / as-of date / 2 blank rows
-    df = pd.read_excel(path, skiprows=5, engine="openpyxl",
-                       dtype={"Item Code": str})
+    df = _read_magic(path, skiprows=5, dtype={"Item Code": str})
     df["Item Code"] = df["Item Code"].str.strip()
     df["On Hand"]   = pd.to_numeric(df["On Hand"], errors="coerce")
     df = df.dropna(subset=["Item Code"])
-    # ตัด Item Code ที่ไม่ตรง SKU format มาตรฐาน
     df = df[df["Item Code"].apply(is_valid_sku)].copy()
     print(f"  [NS OnHand]     {len(df):,} rows | {os.path.basename(path)}")
     return df
 
-
 def load_erply(folder: str) -> pd.DataFrame:
     path = _find_file(folder, "Inventory_By_Items")
-    # row 0 = header จริง, row 1-2 = sub-header ขยะ → iloc[2:]
-    df = pd.read_excel(path, skiprows=0, engine="openpyxl", dtype={"code": str})
+    df = _read_magic(path, skiprows=0, dtype={"code": str})
     df = df.iloc[2:].reset_index(drop=True)
     df = df.rename(columns={
         "code":     "item_code",
@@ -153,40 +149,19 @@ def load_erply(folder: str) -> pd.DataFrame:
     df["available"] = pd.to_numeric(df["available"], errors="coerce").fillna(0)
     df["lay_by"]    = pd.to_numeric(df["lay_by"],    errors="coerce").fillna(0)
     df = df[df["item_code"].notna() & (df["item_code"] != "nan")].copy()
-    # ตัด Item Code ที่ไม่ตรง SKU format มาตรฐาน
     df = df[df["item_code"].apply(is_valid_sku)].copy()
     print(f"  [Erply]         {len(df):,} rows | {os.path.basename(path)}")
     return df
 
-
 def load_transfer_order(folder: str) -> pd.DataFrame:
-    """
-    โหลด YMF TRANSFER ORDER BY ITEM LIST
-    ใช้สองอย่าง:
-      A) Qty in Transit = Qty Shipped - Qty Received (status pending)
-      B) On Floor Date fallback = Ship Date เก่าสุดที่ออกจาก 000-คลังผลิต
-    """
     path = _find_file(folder, "YMFTRANSFERORDERBYITEMLISTResults")
-    # skiprows=0: header อยู่แถวแรก ไม่มีขยะ
-    df = pd.read_excel(path, skiprows=0, engine="openpyxl",
-                       dtype={"Item Number": str})
+    df = _read_magic(path, skiprows=0, dtype={"Item Number": str})
     df["Item Number"]       = df["Item Number"].str.strip()
     df["Ship Date"]         = pd.to_datetime(df["Ship Date"],         errors="coerce")
     df["Quantity Shipped"]  = pd.to_numeric(df["Quantity Shipped"],   errors="coerce").fillna(0)
     df["Quantity Received"] = pd.to_numeric(df["Quantity Received"],  errors="coerce").fillna(0)
     print(f"  [TransferOrder] {len(df):,} rows | {os.path.basename(path)}")
     return df
-
-
-def load_all_data(folder: str):
-    """คืน tuple: (df_items, df_ns, df_erply, df_to)"""
-    print("[load_all_data] กำลังโหลดไฟล์ทั้ง 4 ตัว...")
-    df_items = load_items(folder)
-    df_ns    = load_ns_onhand(folder)
-    df_erply = load_erply(folder)
-    df_to    = load_transfer_order(folder)
-    print()
-    return df_items, df_ns, df_erply, df_to
 
 
 # ============================================================

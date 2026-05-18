@@ -44,91 +44,31 @@ ERROR_SENTINEL   = "ERROR"
 # SECTION 2: Load Sales Data
 # ============================================================
 
-def _find_file(folder: str, prefix: str) -> str:
-    for ext in ["*.xlsx", "*.xls"]:
-        matches = glob.glob(os.path.join(folder, f"{prefix}{ext}"))
-        if matches:
-            return sorted(matches)[0]
-    raise FileNotFoundError(f"ไม่พบไฟล์ '{prefix}*.xls(x)' ใน {folder}")
-
-
-def _convert_xls_to_xlsx(xls_path: str, cache_dir: str = "/tmp") -> str:
-    """แปลง SpreadsheetML .xls → .xlsx ผ่าน LibreOffice"""
-    fname    = os.path.basename(xls_path)
-    xlsx_tmp = os.path.join(cache_dir, fname.replace(".xls", ".xlsx"))
-    
-    # --- [ส่วนที่เพิ่มใหม่: หา Path ของ LibreOffice แบบฉลาด] ---
-    libreoffice_exe = r"C:\Program Files\LibreOffice\program\soffice.exe"
-    if not os.path.exists(libreoffice_exe):
-        libreoffice_exe = r"C:\Program Files (x86)\LibreOffice\program\soffice.exe"
-    if not os.path.exists(libreoffice_exe):
-        libreoffice_exe = "libreoffice" # Fallback เผื่อรันบน Linux/Cloud
-    # --------------------------------------------------------
-
-    if not os.path.exists(xlsx_tmp):
-        subprocess.run(
-            [libreoffice_exe, "--headless", "--convert-to", "xlsx",
-             "--outdir", cache_dir, os.path.abspath(xls_path)],
-            capture_output=True
-        )
-    if not os.path.exists(xlsx_tmp):
-        raise RuntimeError(f"LibreOffice แปลงไฟล์ล้มเหลว: {xls_path}")
-    return xlsx_tmp
-
-
 def load_sales_data(folder: str = None, buffer: "io.BytesIO | None" = None) -> pd.DataFrame:
-    """
-    โหลด YMFSALESDATAWITHCOSTResults
-    รับได้ทั้ง folder path (local) หรือ BytesIO buffer (จาก Google Drive)
-    ตัด: Overall Total row, Sales Order, Return Authorization
-    """
-    import io as _io
+    import tempfile
+    from phase2_soh import _read_magic, is_valid_sku, _find_file
 
     if buffer is not None:
-        # โหลดจาก buffer โดยตรง
         buffer.seek(0)
-        try:
-            # ลอง openpyxl ก่อน (.xlsx)
-            df = pd.read_excel(buffer, engine="openpyxl", dtype={"Material Code": str})
-        except Exception:
-            # ถ้าไม่ได้ — เป็น SpreadsheetML .xls → บันทึกลง temp แล้วแปลงด้วย LibreOffice
-            import tempfile, shutil, subprocess as _sp
-            buffer.seek(0)
-            with tempfile.NamedTemporaryFile(suffix=".xls", delete=False) as tmp:
-                tmp.write(buffer.read())
-                tmp_path = tmp.name
-            xlsx_path = tmp_path.replace(".xls", ".xlsx")
-            _sp.run(["libreoffice", "--headless", "--convert-to", "xlsx",
-                     "--outdir", os.path.dirname(tmp_path), tmp_path],
-                    capture_output=True)
-            df = pd.read_excel(xlsx_path, engine="openpyxl", dtype={"Material Code": str})
-            os.unlink(tmp_path)
-            try: os.unlink(xlsx_path)
-            except: pass
+        with tempfile.NamedTemporaryFile(suffix=".xls", delete=False) as tmp:
+            tmp.write(buffer.read())
+            path = tmp.name
     else:
-        # โหลดจาก local folder
         path = _find_file(folder, "YMFSALESDATAWITHCOSTResults")
-        if path.endswith(".xls"):
-            # SpreadsheetML xls — ใช้ xlrd แทน LibreOffice
-            try:
-                df = pd.read_excel(path, engine="xlrd", dtype={"Material Code": str})
-            except Exception:
-                # fallback: convert ด้วย LibreOffice ถ้า xlrd ไม่ได้
-                path = _convert_xls_to_xlsx(path)
-                df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
-        else:
-            df = pd.read_excel(path, engine="openpyxl", dtype={"Material Code": str})
+
+    df = _read_magic(path, skiprows=0, dtype={"Material Code": str})
+    
+    if buffer is not None:
+        os.unlink(path)
 
     # ตัด row ที่ไม่ใช่ transaction จริง
     df = df[df["Type"].isin(VALID_SALE_TYPES)].copy()
 
     df["Material Code"]         = df["Material Code"].str.strip()
-
-    # ตัด Material Code ที่ไม่ตรง SKU format มาตรฐาน
-    from phase2_soh import is_valid_sku
     before = len(df)
     df = df[df["Material Code"].apply(is_valid_sku)].copy()
     print(f"  [Sales SKU filter] ตัดออก {before - len(df):,} rows (non-standard SKU)")
+    
     df["Selling Date"]          = pd.to_datetime(df["Selling Date"],          errors="coerce")
     df["Quantity"]              = pd.to_numeric(df["Quantity"],               errors="coerce").fillna(0)
     df["ACTIVE PRICE/U"]        = pd.to_numeric(df["ACTIVE PRICE/U"],         errors="coerce")
@@ -138,7 +78,7 @@ def load_sales_data(folder: str = None, buffer: "io.BytesIO | None" = None) -> p
     df["Month Sold"]            = pd.to_numeric(df["Month Sold"],              errors="coerce")
     df["Year Sold"]             = pd.to_numeric(df["Year Sold"],               errors="coerce")
 
-    print(f"  [Sales]         {len(df):,} rows | {os.path.basename(path)}")
+    print(f"  [Sales]         {len(df):,} rows")
     return df
 
 

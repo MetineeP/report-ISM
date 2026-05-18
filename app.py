@@ -766,7 +766,15 @@ def build_buffers_from_uploads(uploaded_files: list) -> dict:
 
 # Run
 if run_btn:
+    # 1. ระบบป้องกัน: เช็คก่อนเลยว่ามีไฟล์เข้ามาถึงระบบจริงๆ หรือไม่
+    if not uploaded_files:
+        st.error("❌ ไม่พบข้อมูลไฟล์! (อัปโหลดไม่สำเร็จ หรือขนาดไฟล์รวมอาจจะเกินขีดจำกัด)")
+        st.stop()
+
+    # 2. แปลงไฟล์ไปใช้งาน
     buffers = build_buffers_from_uploads(uploaded_files)
+    
+    # (ลบโค้ด st.expander "ไฟล์ที่อัปโหลด (คลิกเพื่อดู)" ทิ้งไปแล้ว เพื่อลดความซ้ำซ้อน)
 
     try:
         if report_choice == "Inventory Aging":

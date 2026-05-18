@@ -822,90 +822,89 @@ if st.session_state.report_data is not None:
     # Filter + Table
     section_header("🔍 ข้อมูลรายละเอียด")
 
-# Filter bar
+# Filter bar - เปลี่ยนจาก Multiselect เป็น Checkbox inside Popover (แก้ไขไม่ให้แอปล่ม)
     col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 2])
 
     with col_f1:
         st.markdown("<span style='font-size:0.85rem; font-weight:600;'>Location</span>", unsafe_allow_html=True)
         loc_col = "location" if "location" in df_report.columns else None
         sel_loc = []
+        
         if loc_col:
             locs = sorted(df_report[loc_col].dropna().unique().tolist())
             
-            # ตรวจสอบสถานะเพื่อแสดงข้อความบนปุ่ม
-            all_loc_state = st.session_state.get("loc_all", True)
-            if all_loc_state:
+            # ตรวจสอบจำนวนตัวเลือกที่ผู้ใช้ติ๊กเลือกผ่าน Session State เพื่อเปลี่ยนตัวหนังสือหน้าปุ่ม
+            active_locs = [l for l in locs if st.session_state.get(f"chk_loc_{l}", True)]
+            
+            if len(active_locs) == len(locs):
                 loc_label = "✅ ทั้งหมด"
+            elif len(active_locs) == 0:
+                loc_label = "❌ ไม่เลือกเลย"
             else:
-                c_count = sum(1 for l in locs if st.session_state.get(f"loc_off_{l}", False))
-                loc_label = f"📍 เลือกแล้ว {c_count} รายการ"
-
-            # สร้าง Popover (Dropdown แบบประหยัดพื้นที่)
+                loc_label = f"📍 เลือกแล้ว {len(active_locs)} รายการ"
+            
             with st.popover(loc_label, use_container_width=True):
-                all_loc = st.checkbox("✅ เลือกทั้งหมด", value=True, key="loc_all")
+                # ติ๊กออกอันนี้อันเดียวเพื่อเคลียร์เลือกทั้งหมดได้
+                select_all_loc = st.checkbox("เลือกทั้งหมด", value=True, key="all_loc_toggle")
                 st.divider()
+                
                 for l in locs:
-                    if all_loc:
-                        # ถ้าเลือก "ทั้งหมด" ให้ติ๊กถูกและล็อค Checkbox อื่นๆ ไว้
-                        st.checkbox(str(l), value=True, disabled=True, key=f"loc_on_{l}")
-                    else:
-                        # ถ้าไม่ได้เลือก "ทั้งหมด" ให้เปิดให้ผู้ใช้เลือกเองทีละอัน
-                        if st.checkbox(str(l), value=False, key=f"loc_off_{l}"):
-                            sel_loc.append(l)
-            if all_loc:
-                sel_loc = ["ทั้งหมด"]
+                    # ถ้าติ๊กเลือกทั้งหมดให้เปิด True ไว้ ถ้าไม่ ก็เปิดให้เลือกอิสระ
+                    default_val = True if select_all_loc else False
+                    if st.checkbox(str(l), value=default_val, key=f"chk_loc_{l}"):
+                        sel_loc.append(l)
         else:
             sel_loc = ["ทั้งหมด"]
 
     with col_f2:
         st.markdown("<span style='font-size:0.85rem; font-weight:600;'>Product Status</span>", unsafe_allow_html=True)
         sel_status = []
+        
         if "Product Status" in df_report.columns:
             statuses = sorted(df_report["Product Status"].dropna().unique().tolist())
-            all_st_state = st.session_state.get("st_all", True)
-            if all_st_state:
-                st_label = "✅ ทั้งหมด"
+            active_stats = [s for s in statuses if st.session_state.get(f"chk_st_{s}", True)]
+            
+            if len(active_stats) == len(statuses):
+                status_label = "✅ ทั้งหมด"
+            elif len(active_stats) == 0:
+                status_label = "❌ ไม่เลือกเลย"
             else:
-                c_count = sum(1 for s in statuses if st.session_state.get(f"st_off_{s}", False))
-                st_label = f"📍 เลือกแล้ว {c_count} รายการ"
-
-            with st.popover(st_label, use_container_width=True):
-                all_st = st.checkbox("✅ เลือกทั้งหมด", value=True, key="st_all")
+                status_label = f"📍 เลือกแล้ว {len(active_stats)} รายการ"
+                
+            with st.popover(status_label, use_container_width=True):
+                select_all_st = st.checkbox("เลือกทั้งหมด", value=True, key="all_st_toggle")
                 st.divider()
+                
                 for s in statuses:
-                    if all_st:
-                        st.checkbox(str(s), value=True, disabled=True, key=f"st_on_{s}")
-                    else:
-                        if st.checkbox(str(s), value=False, key=f"st_off_{s}"):
-                            sel_status.append(s)
-            if all_st:
-                sel_status = ["ทั้งหมด"]
+                    default_val = True if select_all_st else False
+                    if st.checkbox(str(s), value=default_val, key=f"chk_st_{s}"):
+                        sel_status.append(s)
         else:
             sel_status = ["ทั้งหมด"]
 
     with col_f3:
         st.markdown("<span style='font-size:0.85rem; font-weight:600;'>Class (Brand)</span>", unsafe_allow_html=True)
         sel_class = []
+        
         if "Class" in df_report.columns:
             classes = sorted(df_report["Class"].dropna().unique().tolist())
-            all_cl_state = st.session_state.get("cl_all", True)
-            if all_cl_state:
-                cl_label = "✅ ทั้งหมด"
+            active_cl = [c for c in classes if st.session_state.get(f"chk_cl_{c}", True)]
+            
+            if len(active_cl) == len(classes):
+                class_label = "✅ ทั้งหมด"
+            elif len(active_cl) == 0:
+                class_label = "❌ ไม่เลือกเลย"
             else:
-                c_count = sum(1 for c in classes if st.session_state.get(f"cl_off_{c}", False))
-                cl_label = f"📍 เลือกแล้ว {c_count} รายการ"
-
-            with st.popover(cl_label, use_container_width=True):
-                all_cl = st.checkbox("✅ เลือกทั้งหมด", value=True, key="cl_all")
+                class_label = f"📍 เลือกแล้ว {len(active_cl)} รายการ"
+                
+            with st.popover(class_label, use_container_width=True):
+                select_all_cl = st.checkbox("เลือกทั้งหมด", value=True, key="all_cl_toggle")
                 st.divider()
+                
                 for c in classes:
-                    if all_cl:
-                        st.checkbox(str(c), value=True, disabled=True, key=f"cl_on_{c}")
-                    else:
-                        if st.checkbox(str(c), value=False, key=f"cl_off_{c}"):
-                            sel_class.append(c)
-            if all_cl:
-                sel_class = ["ทั้งหมด"]
+                    default_val = True if select_all_cl else False
+                    if st.checkbox(str(c), value=default_val, key=f"chk_cl_{c}"):
+                        sel_class.append(c)
         else:
             sel_class = ["ทั้งหมด"]
 
@@ -913,21 +912,27 @@ if st.session_state.report_data is not None:
         st.markdown("<span style='font-size:0.85rem; font-weight:600;'>🔍 ค้นหา Item Code</span>", unsafe_allow_html=True)
         search = st.text_input("ค้นหา", placeholder="เช่น BL-1023943", label_visibility="collapsed")
 
-    # Apply filters (ใช้โค้ดส่วนนี้เหมือนเดิมได้เลยครับ)
+    # Apply filters (ปรับ Logic การกรองข้อมูลให้รองรับ List ตรงจากตัว Checkbox ด้านบน)
     df_display = df_report.copy()
-    if "ทั้งหมด" not in sel_loc and len(sel_loc) > 0 and loc_col:
-        df_display = df_display[df_display[loc_col].isin(sel_loc)]
-    if "ทั้งหมด" not in sel_status and len(sel_status) > 0 and "Product Status" in df_display.columns:
-        df_display = df_display[df_display["Product Status"].isin(sel_status)]
-    if "ทั้งหมด" not in sel_class and len(sel_class) > 0 and "Class" in df_display.columns:
-        df_display = df_display[df_display["Class"].isin(sel_class)]
+    if loc_col and "all_loc_toggle" in st.session_state:
+        if not st.session_state.all_loc_toggle:
+            df_display = df_display[df_display[loc_col].isin(sel_loc)]
+            
+    if "Product Status" in df_display.columns and "all_st_toggle" in st.session_state:
+        if not st.session_state.all_st_toggle:
+            df_display = df_display[df_display["Product Status"].isin(sel_status)]
+            
+    if "Class" in df_display.columns and "all_cl_toggle" in st.session_state:
+        if not st.session_state.all_cl_toggle:
+            df_display = df_display[df_display["Class"].isin(sel_class)]
+            
     if search:
         item_col = "item_code" if "item_code" in df_display.columns else "Material Code"
         if item_col in df_display.columns:
             df_display = df_display[
                 df_display[item_col].str.contains(search, case=False, na=False)
             ]
-
+            
     # ============================================================
     # Data Formatting สำหรับตารางบนหน้าเว็บ
     # ============================================================

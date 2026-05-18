@@ -718,7 +718,7 @@ def match_uploads(files):
 
 with st.container():
     st.markdown("### 📂 Step 1 — อัปโหลดไฟล์ข้อมูล")
-    st.caption("อัปโหลดไฟล์ดิบจากระบบ NetSuite และ Erply รองรับ .xlsx และ .xls ชื่อไฟล์ไม่ต้องแก้ไข วางได้เลย")
+    st.caption("อัปโหลดไฟล์ดิบจากระบบ NetSuite และ Erply รองรับ .xlsx (หรือ .csv) (เพื่อความรวดเร็วในการประมวลผลรายงาน ควรแปลงไฟล์ให้อยู่ในนามสกุลที่แนะนำ) ชื่อไฟล์ไม่ต้องแก้ไข วางได้เลย")
 
     uploaded_files = st.file_uploader(
         label="เลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)",
@@ -822,33 +822,33 @@ if st.session_state.report_data is not None:
     # Filter + Table
     section_header("🔍 ข้อมูลรายละเอียด")
 
-    # Filter bar
+ # Filter bar
     col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 2])
 
     with col_f1:
-        # Location filter
+        # Location filter (Multiselect)
         loc_col = "location" if "location" in df_report.columns else None
         if loc_col:
-            locs = ["ทั้งหมด"] + sorted(df_report[loc_col].dropna().unique().tolist())
-            sel_loc = st.selectbox("Location", locs)
+            locs = sorted(df_report[loc_col].dropna().unique().tolist())
+            sel_loc = st.multiselect("Location", options=["ทั้งหมด"] + locs, default=["ทั้งหมด"])
         else:
-            sel_loc = "ทั้งหมด"
+            sel_loc = ["ทั้งหมด"]
 
     with col_f2:
-        # Product Status filter
+        # Product Status filter (Multiselect)
         if "Product Status" in df_report.columns:
-            statuses = ["ทั้งหมด"] + sorted(df_report["Product Status"].dropna().unique().tolist())
-            sel_status = st.selectbox("Product Status", statuses)
+            statuses = sorted(df_report["Product Status"].dropna().unique().tolist())
+            sel_status = st.multiselect("Product Status", options=["ทั้งหมด"] + statuses, default=["ทั้งหมด"])
         else:
-            sel_status = "ทั้งหมด"
+            sel_status = ["ทั้งหมด"]
 
     with col_f3:
-        # Class filter
+        # Class filter (Multiselect)
         if "Class" in df_report.columns:
-            classes = ["ทั้งหมด"] + sorted(df_report["Class"].dropna().unique().tolist())
-            sel_class = st.selectbox("Class (Brand)", classes)
+            classes = sorted(df_report["Class"].dropna().unique().tolist())
+            sel_class = st.multiselect("Class (Brand)", options=["ทั้งหมด"] + classes, default=["ทั้งหมด"])
         else:
-            sel_class = "ทั้งหมด"
+            sel_class = ["ทั้งหมด"]
 
     with col_f4:
         # Search item code
@@ -856,12 +856,12 @@ if st.session_state.report_data is not None:
 
     # Apply filters
     df_display = df_report.copy()
-    if sel_loc != "ทั้งหมด" and loc_col:
-        df_display = df_display[df_display[loc_col] == sel_loc]
-    if sel_status != "ทั้งหมด" and "Product Status" in df_display.columns:
-        df_display = df_display[df_display["Product Status"] == sel_status]
-    if sel_class != "ทั้งหมด" and "Class" in df_display.columns:
-        df_display = df_display[df_display["Class"] == sel_class]
+    if "ทั้งหมด" not in sel_loc and len(sel_loc) > 0 and loc_col:
+        df_display = df_display[df_display[loc_col].isin(sel_loc)]
+    if "ทั้งหมด" not in sel_status and len(sel_status) > 0 and "Product Status" in df_display.columns:
+        df_display = df_display[df_display["Product Status"].isin(sel_status)]
+    if "ทั้งหมด" not in sel_class and len(sel_class) > 0 and "Class" in df_display.columns:
+        df_display = df_display[df_display["Class"].isin(sel_class)]
     if search:
         item_col = "item_code" if "item_code" in df_display.columns else "Material Code"
         if item_col in df_display.columns:
@@ -869,8 +869,51 @@ if st.session_state.report_data is not None:
                 df_display[item_col].str.contains(search, case=False, na=False)
             ]
 
+    # ============================================================
+    # Data Formatting สำหรับตารางบนหน้าเว็บ
+    # ============================================================
+    import numpy as np
+
+    # 1. Effective_Floor_date เอาแค่วันที่ (ไม่โชว์เวลา)
+    if "effective_floor_date" in df_display.columns:
+        df_display["effective_floor_date"] = pd.to_datetime(df_display["effective_floor_date"], errors="coerce").dt.strftime('%Y-%m-%d')
+
+    # จัดกลุ่มคอลัมน์
+    bucket_cols   = [c for c in df_display.columns if ("Days" in c and "แต่" in c) or c == ">720 Days"]
+    qty_cols      = [c for c in df_display.columns if "Qty" in c or c in bucket_cols]
+    amt_cols      = [c for c in df_display.columns if "Amt" in c]
+    cost_cols     = ["Standard Cost", "Active Sales Pricing", "Cost Value"]
+    days_aged_col = ["Days Aged"] if "Days Aged" in df_display.columns else []
+
+    # 2. แปลงคำว่า "ERROR" เป็นค่าว่าง (NaN)
+    for col in qty_cols + amt_cols + cost_cols + days_aged_col:
+        if col in df_display.columns:
+            df_display[col] = df_display[col].replace("ERROR", np.nan)
+            df_display[col] = pd.to_numeric(df_display[col], errors="coerce")
+
+    # 3. ลบเลข 0 ออกจากคอลัมน์ Qty (เปลี่ยน 0 เป็นค่าว่าง)
+    for col in qty_cols:
+        if col in df_display.columns:
+            df_display[col] = df_display[col].replace(0, np.nan)
+
+    # 4. จัด Format ตัวเลข (ลูกน้ำ, ตัดทศนิยม, จัดหน้า)
+    pd.set_option("styler.render.max_elements", 2000000) # ขยายลิมิตกัน Error
+    format_dict = {}
+    center_cols = [c for c in qty_cols + days_aged_col if c in df_display.columns]
+    right_cols  = [c for c in amt_cols + cost_cols if c in df_display.columns]
+
+    for col in center_cols + right_cols:
+        format_dict[col] = "{:,.0f}"
+
+    styled_df = df_display.style.format(format_dict, na_rep="")
+    
+    if center_cols:
+        styled_df = styled_df.set_properties(subset=center_cols, **{'text-align': 'center'})
+    if right_cols:
+        styled_df = styled_df.set_properties(subset=right_cols, **{'text-align': 'right'})
+
     st.caption(f"แสดง {len(df_display):,} รายการ จากทั้งหมด {len(df_report):,} รายการ")
-    st.dataframe(df_display, use_container_width=True, hide_index=True, height=400)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True, height=400)
 
     # Download button
     st.divider()

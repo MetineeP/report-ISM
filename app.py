@@ -677,67 +677,13 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # --- File Uploader ---
-    st.markdown("#### 📂 อัปโหลดไฟล์ข้อมูล")
-    st.caption(
-        "อัปโหลดไฟล์ดิบจากระบบ NetSuite และ Erply\n"
-        "รองรับ .xlsx และ .xls\n"
-        "ชื่อไฟล์ไม่ต้องแก้ไข วางได้เลย"
-    )
-
-    uploaded_files = st.file_uploader(
-        label="เลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)",
-        type=["xlsx", "xls"],
-        accept_multiple_files=True,
-        label_visibility="collapsed",
-    )
-
-    # แสดงสถานะไฟล์ที่ต้องการ
-    REQUIRED_PREFIXES = {
-        "items":    ("Items",                          "Items Master"),
-        "ns":       ("YMFINVENTORYONHANDREPORT",       "NS On Hand"),
-        "erply":    ("Inventory By Items",             "Erply Inventory"),
-        "transfer": ("YMFTRANSFERORDERBYITEMLISTResults", "Transfer Order"),
-        "sales":    ("YMFSALESDATAWITHCOSTResults",   "Sales Data"),
-    }
-
-    # match ไฟล์ที่ upload กับ required prefixes
-    def match_uploads(uploaded_files):
-        matched = {}
-        for key, (prefix, label) in REQUIRED_PREFIXES.items():
-            for f in uploaded_files:
-                if f.name.startswith(prefix):
-                    matched[key] = f
-                    break
-        return matched
-
-    if uploaded_files:
-        matched = match_uploads(uploaded_files)
-        for key, (prefix, label) in REQUIRED_PREFIXES.items():
-            if key in matched:
-                st.markdown(f"<p style='color:#86EFAC'>✅ {label}</p>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<p style='color:#FCA5A5'>⬜ {label}</p>", unsafe_allow_html=True)
-    else:
-        for key, (prefix, label) in REQUIRED_PREFIXES.items():
-            st.markdown(f"<p style='color:#93C5FD'>⬜ {label}</p>", unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # --- Run button ---
-    files_ready = bool(uploaded_files) and len(match_uploads(uploaded_files)) >= 3
+    # --- Run button (ใน sidebar — กดหลัง upload ไฟล์ใน main content แล้ว) ---
     run_btn = st.button(
         "▶ Run Report",
         type="primary",
         use_container_width=True,
-        disabled=not files_ready,
     )
-    if not files_ready and uploaded_files:
-        st.caption("⚠️ กรุณาอัปโหลดไฟล์ให้ครบอย่างน้อย 3 ไฟล์หลัก")
-    elif not uploaded_files:
-        st.caption("⬆️ อัปโหลดไฟล์ก่อนแล้วกด Run Report")
-    else:
-        st.caption("⏱ ใช้เวลาประมาณ 1-3 นาที\nขึ้นอยู่กับขนาดของข้อมูล")
+    st.caption("⏱ ใช้เวลาประมาณ 1-3 นาที\nขึ้นอยู่กับขนาดของข้อมูล")
 
 
 # ============================================================
@@ -748,6 +694,55 @@ with st.sidebar:
 st.markdown(f"# 📊 {report_choice} Report")
 st.markdown(f"<small style='color:#6B7280'>YMF International Thai Co., Ltd.</small>",
             unsafe_allow_html=True)
+st.divider()
+
+# ============================================================
+# File Upload Section — อยู่ใน main content พื้นขาว อ่านง่าย
+# ============================================================
+
+REQUIRED_PREFIXES = {
+    "items":    ("Items",                              "Items Master"),
+    "ns":       ("YMFINVENTORYONHANDREPORT",           "NS On Hand"),
+    "erply":    ("Inventory_By_Items",                 "Erply Inventory"),
+    "transfer": ("YMFTRANSFERORDERBYITEMLISTResults", "Transfer Order"),
+    "sales":    ("YMFSALESDATAWITHCOSTResults",       "Sales Data"),
+}
+
+def match_uploads(files):
+    matched = {}
+    for key, (prefix, label) in REQUIRED_PREFIXES.items():
+        for f in files:
+            # รองรับทั้ง space และ underscore ในชื่อไฟล์
+            clean_name = f.name.replace(" ", "_")
+            if clean_name.startswith(prefix) or f.name.startswith(prefix):
+                matched[key] = f
+                break
+    return matched
+
+with st.container():
+    st.markdown("### 📂 Step 1 — อัปโหลดไฟล์ข้อมูล")
+    st.caption("อัปโหลดไฟล์ดิบจากระบบ NetSuite และ Erply รองรับ .xlsx และ .xls ชื่อไฟล์ไม่ต้องแก้ไข วางได้เลย")
+
+    uploaded_files = st.file_uploader(
+        label="เลือกไฟล์ (เลือกได้หลายไฟล์พร้อมกัน)",
+        type=["xlsx", "xls"],
+        accept_multiple_files=True,
+        help="อัปโหลดพร้อมกันได้เลย ไม่ต้องทีละไฟล์"
+    )
+
+    # แสดงสถานะไฟล์แต่ละตัว
+    if uploaded_files:
+        matched = match_uploads(uploaded_files)
+        cols = st.columns(5)
+        for i, (key, (prefix, label)) in enumerate(REQUIRED_PREFIXES.items()):
+            with cols[i]:
+                if key in matched:
+                    st.success(f"✅ {label}")
+                else:
+                    st.warning(f"⬜ {label}")
+    else:
+        st.info("⬆️ กรุณาอัปโหลดไฟล์ข้อมูลก่อน จากนั้นกด **▶ Run Report** ใน sidebar")
+
 st.divider()
 
 # Session state สำหรับเก็บผลลัพธ์

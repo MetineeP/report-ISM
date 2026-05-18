@@ -846,7 +846,8 @@ if st.session_state.report_data is not None:
         # Class filter (Multiselect)
         if "Class" in df_report.columns:
             classes = sorted(df_report["Class"].dropna().unique().tolist())
-            sel_class = st.multiselect("Class (Brand)", options=["ทั้งหมด"] + classes, default=["["ทั้งหมด"]"])
+            # ปรับปรุงแก้ไขวงเล็บที่ซ้อนกันให้ถูกต้องตรงนี้ครับ
+            sel_class = st.multiselect("Class (Brand)", options=["ทั้งหมด"] + classes, default=["ทั้งหมด"])
         else:
             sel_class = ["ทั้งหมด"]
 

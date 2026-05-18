@@ -35,9 +35,6 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-from google.oauth2 import service_account
 
 # ============================================================
 # SECTION 1: Page Config

@@ -95,20 +95,28 @@ st.markdown("""
                    text-transform:uppercase; letter-spacing:0.08em;
                    border-bottom:2px solid #E5E7EB; padding-bottom:6px; margin:16px 0 10px; }
 
-    /* File uploader ใน sidebar */
+    /* File uploader ใน sidebar — แก้สีชื่อไฟล์ให้ชัด */
     section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
-        background: #2D527A !important;
+        background: #1A3A5C !important;
         border: 1.5px dashed #7AAFD4 !important;
         border-radius: 8px !important;
     }
     section[data-testid="stSidebar"] [data-testid="stFileUploader"] * {
-        color: #E2EAF4 !important;
+        color: #FFFFFF !important;
     }
     section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
-        background: #1F4E79 !important;
+        background: #2D6EA8 !important;
         border: 1px solid #7AAFD4 !important;
         color: #FFFFFF !important;
         border-radius: 6px !important;
+    }
+    /* ชื่อไฟล์ที่ upload แล้ว */
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] span,
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] p,
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] small,
+    section[data-testid="stSidebar"] [data-testid="stFileUploaderFileName"] {
+        color: #FFFFFF !important;
+        font-weight: 500 !important;
     }
 
     /* Checkbox และ status ไฟล์ใน sidebar */

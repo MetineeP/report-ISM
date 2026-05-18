@@ -932,12 +932,9 @@ if st.session_state.report_data is not None:
             df_display = df_display[
                 df_display[item_col].str.contains(search, case=False, na=False)
             ]
-            
+
     # ============================================================
-    # Data Formatting สำหรับตารางบนหน้าเว็บ
-    # ============================================================
-    # ============================================================
-    # Data Formatting สำหรับตารางบนหน้าเว็บ
+    # Data Formatting สำหรับตารางบนหน้าเว็บ (แก้ไขป้องกันพังเวลากรองสาขา)
     # ============================================================
     import numpy as np
 
@@ -945,47 +942,46 @@ if st.session_state.report_data is not None:
     if "effective_floor_date" in df_display.columns:
         df_display["effective_floor_date"] = pd.to_datetime(df_display["effective_floor_date"], errors="coerce").dt.strftime('%Y-%m-%d')
 
-    # จัดกลุ่มคอลัมน์
+    # จัดกลุ่มคอลัมน์ 
     bucket_cols   = [c for c in df_display.columns if ("Days" in c and "แต่" in c) or c == ">720 Days"]
     qty_cols      = [c for c in df_display.columns if "Qty" in c or c in bucket_cols]
     amt_cols      = [c for c in df_display.columns if "Amt" in c]
     cost_cols     = ["Standard Cost", "Active Sales Pricing", "Cost Value"]
     days_aged_col = ["Days Aged"] if "Days Aged" in df_display.columns else []
 
-    # กำหนดชื่อกลุ่มคอลัมน์สีเหลืองและสีฟ้า
     yellow_cols   = ["soh_ns", "soh_erply", "soh_total", "ALL (NS+Erply) Qty", "ALL (From NS) Qty"]
     blue_cols     = ["% of Item SOH"]
 
-    # รวมคอลัมน์ตัวเลขทั้งหมดเพื่อล้างข้อมูล
+    # รวมคอลัมน์ตัวเลขทั้งหมดเพื่อตรวจสอบความสะอาด
     all_numeric_cols = list(set(qty_cols + amt_cols + cost_cols + days_aged_col + yellow_cols + blue_cols))
 
-    # 2. แปลงคำว่า "ERROR" เป็นค่าว่าง (NaN) 
+    # ป้องกันแปลงค่าพลาด: บังคับให้คอลัมน์เหล่านี้เป็น numeric และถ้ามี Error หรือค่าว่างให้เปลี่ยนเป็น NaN
     for col in all_numeric_cols:
         if col in df_display.columns:
             df_display[col] = df_display[col].replace("ERROR", np.nan)
             df_display[col] = pd.to_numeric(df_display[col], errors="coerce")
 
-    # 3. ลบเลข 0 ออกจากคอลัมน์ Qty (ยกเว้นคอลัมน์สีเหลือง)
+    # ลบเลข 0 ออกจากคอลัมน์ Qty (เปลี่ยน 0 เป็น NaN ยกเว้นคอลัมน์หลักยอดรวมสต็อก)
     for col in qty_cols:
         if col in df_display.columns and col not in ["soh_ns", "soh_erply", "soh_total"]:
             df_display[col] = df_display[col].replace(0, np.nan)
 
-    # 4. จัด Format ตัวเลข (ลูกน้ำ, ตัดทศนิยม, จัดหน้า)
-    pd.set_option("styler.render.max_elements", 2000000) 
-    format_dict = {}
+    # จัด Format ตัวเลขด้วยความปลอดภัยสูงสุด
+    pd.set_option("styler.render.max_elements", 2000000)
     
-    # [🔥 แก้ไขจุดนี้] ใช้ list(set(...)) เพื่อป้องกันชื่อคอลัมน์ซ้ำซ้อน
-    center_cols = list(set([c for c in qty_cols + days_aged_col + yellow_cols if c in df_display.columns]))
-    right_cols  = list(set([c for c in amt_cols + cost_cols + blue_cols if c in df_display.columns]))
+    # แยกคอลัมน์ในการจัดตำแหน่งข้อความ
+    center_cols = [c for c in qty_cols + days_aged_col + yellow_cols if c in df_display.columns]
+    right_cols  = [c for c in amt_cols + cost_cols + blue_cols if c in df_display.columns]
 
-    # ลูปใส่ฟอร์แมตตัวเลข
-    for col in center_cols + right_cols:
+    # บังคับสร้างฟอร์แมตเตอร์ที่ข้ามค่าว่างอัตโนมัติ (Safe Format Lambda)
+    format_dict = {}
+    for col in df_display.columns:
         if col in blue_cols:
-            format_dict[col] = "{:,.1f}"   # 🟦 คอลัมน์สีฟ้า: ใส่ลูกน้ำ มีทศนิยม 1 ตำแหน่ง
-        else:
-            format_dict[col] = "{:,.0f}"   # 🟨 คอลัมน์สีเหลืองและอื่นๆ: ใส่ลูกน้ำ ไม่มีทศนิยม
+            format_dict[col] = lambda x: f"{x:,.1f}" if (pd.notna(x) and isinstance(x, (int, float))) else ""
+        elif col in all_numeric_cols:
+            format_dict[col] = lambda x: f"{x:,.0f}" if (pd.notna(x) and isinstance(x, (int, float))) else ""
 
-    # นำ Format มาใช้ร่วมกับ st.dataframe
+    # เรนเดอร์ตารางออกมา
     styled_df = df_display.style.format(format_dict, na_rep="")
     
     if center_cols:

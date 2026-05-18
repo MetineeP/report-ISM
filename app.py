@@ -826,36 +826,94 @@ if st.session_state.report_data is not None:
     col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 2])
 
     with col_f1:
-        # Location filter (Multiselect)
+        st.markdown("<span style='font-size:0.85rem; font-weight:600;'>Location</span>", unsafe_allow_html=True)
         loc_col = "location" if "location" in df_report.columns else None
+        sel_loc = []
         if loc_col:
             locs = sorted(df_report[loc_col].dropna().unique().tolist())
-            sel_loc = st.multiselect("Location", options=["ทั้งหมด"] + locs, default=["ทั้งหมด"])
+            
+            # ตรวจสอบสถานะเพื่อแสดงข้อความบนปุ่ม
+            all_loc_state = st.session_state.get("loc_all", True)
+            if all_loc_state:
+                loc_label = "✅ ทั้งหมด"
+            else:
+                c_count = sum(1 for l in locs if st.session_state.get(f"loc_off_{l}", False))
+                loc_label = f"📍 เลือกแล้ว {c_count} รายการ"
+
+            # สร้าง Popover (Dropdown แบบประหยัดพื้นที่)
+            with st.popover(loc_label, use_container_width=True):
+                all_loc = st.checkbox("✅ เลือกทั้งหมด", value=True, key="loc_all")
+                st.divider()
+                for l in locs:
+                    if all_loc:
+                        # ถ้าเลือก "ทั้งหมด" ให้ติ๊กถูกและล็อค Checkbox อื่นๆ ไว้
+                        st.checkbox(str(l), value=True, disabled=True, key=f"loc_on_{l}")
+                    else:
+                        # ถ้าไม่ได้เลือก "ทั้งหมด" ให้เปิดให้ผู้ใช้เลือกเองทีละอัน
+                        if st.checkbox(str(l), value=False, key=f"loc_off_{l}"):
+                            sel_loc.append(l)
+            if all_loc:
+                sel_loc = ["ทั้งหมด"]
         else:
             sel_loc = ["ทั้งหมด"]
 
     with col_f2:
-        # Product Status filter (Multiselect)
+        st.markdown("<span style='font-size:0.85rem; font-weight:600;'>Product Status</span>", unsafe_allow_html=True)
+        sel_status = []
         if "Product Status" in df_report.columns:
             statuses = sorted(df_report["Product Status"].dropna().unique().tolist())
-            sel_status = st.multiselect("Product Status", options=["ทั้งหมด"] + statuses, default=["ทั้งหมด"])
+            all_st_state = st.session_state.get("st_all", True)
+            if all_st_state:
+                st_label = "✅ ทั้งหมด"
+            else:
+                c_count = sum(1 for s in statuses if st.session_state.get(f"st_off_{s}", False))
+                st_label = f"📍 เลือกแล้ว {c_count} รายการ"
+
+            with st.popover(st_label, use_container_width=True):
+                all_st = st.checkbox("✅ เลือกทั้งหมด", value=True, key="st_all")
+                st.divider()
+                for s in statuses:
+                    if all_st:
+                        st.checkbox(str(s), value=True, disabled=True, key=f"st_on_{s}")
+                    else:
+                        if st.checkbox(str(s), value=False, key=f"st_off_{s}"):
+                            sel_status.append(s)
+            if all_st:
+                sel_status = ["ทั้งหมด"]
         else:
             sel_status = ["ทั้งหมด"]
 
     with col_f3:
-        # Class filter (Multiselect)
+        st.markdown("<span style='font-size:0.85rem; font-weight:600;'>Class (Brand)</span>", unsafe_allow_html=True)
+        sel_class = []
         if "Class" in df_report.columns:
             classes = sorted(df_report["Class"].dropna().unique().tolist())
-            # ปรับปรุงแก้ไขวงเล็บที่ซ้อนกันให้ถูกต้องตรงนี้ครับ
-            sel_class = st.multiselect("Class (Brand)", options=["ทั้งหมด"] + classes, default=["ทั้งหมด"])
+            all_cl_state = st.session_state.get("cl_all", True)
+            if all_cl_state:
+                cl_label = "✅ ทั้งหมด"
+            else:
+                c_count = sum(1 for c in classes if st.session_state.get(f"cl_off_{c}", False))
+                cl_label = f"📍 เลือกแล้ว {c_count} รายการ"
+
+            with st.popover(cl_label, use_container_width=True):
+                all_cl = st.checkbox("✅ เลือกทั้งหมด", value=True, key="cl_all")
+                st.divider()
+                for c in classes:
+                    if all_cl:
+                        st.checkbox(str(c), value=True, disabled=True, key=f"cl_on_{c}")
+                    else:
+                        if st.checkbox(str(c), value=False, key=f"cl_off_{c}"):
+                            sel_class.append(c)
+            if all_cl:
+                sel_class = ["ทั้งหมด"]
         else:
             sel_class = ["ทั้งหมด"]
 
     with col_f4:
-        # Search item code
-        search = st.text_input("🔍 ค้นหา Item Code", placeholder="เช่น BL-1023943")
+        st.markdown("<span style='font-size:0.85rem; font-weight:600;'>🔍 ค้นหา Item Code</span>", unsafe_allow_html=True)
+        search = st.text_input("ค้นหา", placeholder="เช่น BL-1023943", label_visibility="collapsed")
 
-    # Apply filters
+    # Apply filters (ใช้โค้ดส่วนนี้เหมือนเดิมได้เลยครับ)
     df_display = df_report.copy()
     if "ทั้งหมด" not in sel_loc and len(sel_loc) > 0 and loc_col:
         df_display = df_display[df_display[loc_col].isin(sel_loc)]
@@ -873,24 +931,27 @@ if st.session_state.report_data is not None:
     # ============================================================
     # Data Formatting สำหรับตารางบนหน้าเว็บ
     # ============================================================
+    # ============================================================
+    # Data Formatting สำหรับตารางบนหน้าเว็บ
+    # ============================================================
     import numpy as np
 
     # 1. Effective_Floor_date เอาแค่วันที่ (ไม่โชว์เวลา)
     if "effective_floor_date" in df_display.columns:
         df_display["effective_floor_date"] = pd.to_datetime(df_display["effective_floor_date"], errors="coerce").dt.strftime('%Y-%m-%d')
 
-    # จัดกลุ่มคอลัมน์ (โค้ดเดิมของคุณคงไว้ทั้งหมด)
+    # จัดกลุ่มคอลัมน์
     bucket_cols   = [c for c in df_display.columns if ("Days" in c and "แต่" in c) or c == ">720 Days"]
     qty_cols      = [c for c in df_display.columns if "Qty" in c or c in bucket_cols]
     amt_cols      = [c for c in df_display.columns if "Amt" in c]
     cost_cols     = ["Standard Cost", "Active Sales Pricing", "Cost Value"]
     days_aged_col = ["Days Aged"] if "Days Aged" in df_display.columns else []
 
-    # [ปรับปรุงเพิ่ม] กำหนดชื่อกลุ่มคอลัมน์สีเหลืองและสีฟ้า เพื่อแยกฟอร์แมตตามที่คุณสั่ง
+    # กำหนดชื่อกลุ่มคอลัมน์สีเหลืองและสีฟ้า
     yellow_cols   = ["soh_ns", "soh_erply", "soh_total", "ALL (NS+Erply) Qty", "ALL (From NS) Qty"]
     blue_cols     = ["% of Item SOH"]
 
-    # รวมคอลัมน์ตัวเลขทั้งหมดเพื่อล้างข้อมูล (รวมกลุ่มใหม่เข้าไป ป้องกันการเกิด ERROR บนหน้าเว็บ)
+    # รวมคอลัมน์ตัวเลขทั้งหมดเพื่อล้างข้อมูล
     all_numeric_cols = list(set(qty_cols + amt_cols + cost_cols + days_aged_col + yellow_cols + blue_cols))
 
     # 2. แปลงคำว่า "ERROR" เป็นค่าว่าง (NaN) 
@@ -899,27 +960,27 @@ if st.session_state.report_data is not None:
             df_display[col] = df_display[col].replace("ERROR", np.nan)
             df_display[col] = pd.to_numeric(df_display[col], errors="coerce")
 
-    # 3. ลบเลข 0 ออกจากคอลัมน์ Qty (เปลี่ยน 0 เป็นค่าว่าง)
-    # [ปรับปรุง] เพิ่มเงื่อนไขไม่ลบเลข 0 ในคอลัมน์สีเหลือง (soh_ns, soh_erply, soh_total) เพื่อให้แสดงผล 0.000000 เป็นเลข 0 ตามเดิม ไม่กลายเป็นช่องว่าง
+    # 3. ลบเลข 0 ออกจากคอลัมน์ Qty (ยกเว้นคอลัมน์สีเหลือง)
     for col in qty_cols:
         if col in df_display.columns and col not in ["soh_ns", "soh_erply", "soh_total"]:
             df_display[col] = df_display[col].replace(0, np.nan)
 
     # 4. จัด Format ตัวเลข (ลูกน้ำ, ตัดทศนิยม, จัดหน้า)
-    pd.set_option("styler.render.max_elements", 2000000) # ขยายลิมิตกัน Error
+    pd.set_option("styler.render.max_elements", 2000000) 
     format_dict = {}
     
-    # [ปรับปรุง] แยกการจัดตำแหน่งคอลัมน์ใหม่: เอาคอลัมน์สีเหลืองไปไว้ตรงกลาง
-    center_cols = [c for c in qty_cols + days_aged_col + yellow_cols if c in df_display.columns]
-    right_cols  = [c for c in amt_cols + cost_cols + blue_cols if c in df_display.columns]
+    # [🔥 แก้ไขจุดนี้] ใช้ list(set(...)) เพื่อป้องกันชื่อคอลัมน์ซ้ำซ้อน
+    center_cols = list(set([c for c in qty_cols + days_aged_col + yellow_cols if c in df_display.columns]))
+    right_cols  = list(set([c for c in amt_cols + cost_cols + blue_cols if c in df_display.columns]))
 
-    # [ปรับปรุง] ลูปใส่ฟอร์แมตตัวเลขแยกตามเงื่อนไขสีเหลือง/สีฟ้า
+    # ลูปใส่ฟอร์แมตตัวเลข
     for col in center_cols + right_cols:
         if col in blue_cols:
-            format_dict[col] = "{:,.1f}"   # 🟦 คอลัมน์สีฟ้า: ใส่ลูกน้ำ มีทศนิยม 1 ตำแหน่งพอ
+            format_dict[col] = "{:,.1f}"   # 🟦 คอลัมน์สีฟ้า: ใส่ลูกน้ำ มีทศนิยม 1 ตำแหน่ง
         else:
-            format_dict[col] = "{:,.0f}"   # 🟨 คอลัมน์สีเหลืองและอื่นๆ: ใส่ลูกน้ำ ตรงกลาง ไม่เอาทศนิยม
+            format_dict[col] = "{:,.0f}"   # 🟨 คอลัมน์สีเหลืองและอื่นๆ: ใส่ลูกน้ำ ไม่มีทศนิยม
 
+    # นำ Format มาใช้ร่วมกับ st.dataframe
     styled_df = df_display.style.format(format_dict, na_rep="")
     
     if center_cols:
@@ -932,6 +993,7 @@ if st.session_state.report_data is not None:
 
     # Download button
     st.divider()
+
     col_dl, col_info = st.columns([2, 5])
     with col_dl:
         with st.spinner("กำลังสร้างไฟล์ Excel..."):

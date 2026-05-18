@@ -822,7 +822,7 @@ if st.session_state.report_data is not None:
     # Filter + Table
     section_header("🔍 ข้อมูลรายละเอียด")
 
- # Filter bar
+# Filter bar
     col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 2])
 
     with col_f1:
@@ -846,7 +846,7 @@ if st.session_state.report_data is not None:
         # Class filter (Multiselect)
         if "Class" in df_report.columns:
             classes = sorted(df_report["Class"].dropna().unique().tolist())
-            sel_class = st.multiselect("Class (Brand)", options=["ทั้งหมด"] + classes, default=["ทั้งหมด"])
+            sel_class = st.multiselect("Class (Brand)", options=["ทั้งหมด"] + classes, default=["["ทั้งหมด"]"])
         else:
             sel_class = ["ทั้งหมด"]
 
@@ -878,32 +878,46 @@ if st.session_state.report_data is not None:
     if "effective_floor_date" in df_display.columns:
         df_display["effective_floor_date"] = pd.to_datetime(df_display["effective_floor_date"], errors="coerce").dt.strftime('%Y-%m-%d')
 
-    # จัดกลุ่มคอลัมน์
+    # จัดกลุ่มคอลัมน์ (โค้ดเดิมของคุณคงไว้ทั้งหมด)
     bucket_cols   = [c for c in df_display.columns if ("Days" in c and "แต่" in c) or c == ">720 Days"]
     qty_cols      = [c for c in df_display.columns if "Qty" in c or c in bucket_cols]
     amt_cols      = [c for c in df_display.columns if "Amt" in c]
     cost_cols     = ["Standard Cost", "Active Sales Pricing", "Cost Value"]
     days_aged_col = ["Days Aged"] if "Days Aged" in df_display.columns else []
 
-    # 2. แปลงคำว่า "ERROR" เป็นค่าว่าง (NaN)
-    for col in qty_cols + amt_cols + cost_cols + days_aged_col:
+    # [ปรับปรุงเพิ่ม] กำหนดชื่อกลุ่มคอลัมน์สีเหลืองและสีฟ้า เพื่อแยกฟอร์แมตตามที่คุณสั่ง
+    yellow_cols   = ["soh_ns", "soh_erply", "soh_total", "ALL (NS+Erply) Qty", "ALL (From NS) Qty"]
+    blue_cols     = ["% of Item SOH"]
+
+    # รวมคอลัมน์ตัวเลขทั้งหมดเพื่อล้างข้อมูล (รวมกลุ่มใหม่เข้าไป ป้องกันการเกิด ERROR บนหน้าเว็บ)
+    all_numeric_cols = list(set(qty_cols + amt_cols + cost_cols + days_aged_col + yellow_cols + blue_cols))
+
+    # 2. แปลงคำว่า "ERROR" เป็นค่าว่าง (NaN) 
+    for col in all_numeric_cols:
         if col in df_display.columns:
             df_display[col] = df_display[col].replace("ERROR", np.nan)
             df_display[col] = pd.to_numeric(df_display[col], errors="coerce")
 
     # 3. ลบเลข 0 ออกจากคอลัมน์ Qty (เปลี่ยน 0 เป็นค่าว่าง)
+    # [ปรับปรุง] เพิ่มเงื่อนไขไม่ลบเลข 0 ในคอลัมน์สีเหลือง (soh_ns, soh_erply, soh_total) เพื่อให้แสดงผล 0.000000 เป็นเลข 0 ตามเดิม ไม่กลายเป็นช่องว่าง
     for col in qty_cols:
-        if col in df_display.columns:
+        if col in df_display.columns and col not in ["soh_ns", "soh_erply", "soh_total"]:
             df_display[col] = df_display[col].replace(0, np.nan)
 
     # 4. จัด Format ตัวเลข (ลูกน้ำ, ตัดทศนิยม, จัดหน้า)
     pd.set_option("styler.render.max_elements", 2000000) # ขยายลิมิตกัน Error
     format_dict = {}
-    center_cols = [c for c in qty_cols + days_aged_col if c in df_display.columns]
-    right_cols  = [c for c in amt_cols + cost_cols if c in df_display.columns]
+    
+    # [ปรับปรุง] แยกการจัดตำแหน่งคอลัมน์ใหม่: เอาคอลัมน์สีเหลืองไปไว้ตรงกลาง
+    center_cols = [c for c in qty_cols + days_aged_col + yellow_cols if c in df_display.columns]
+    right_cols  = [c for c in amt_cols + cost_cols + blue_cols if c in df_display.columns]
 
+    # [ปรับปรุง] ลูปใส่ฟอร์แมตตัวเลขแยกตามเงื่อนไขสีเหลือง/สีฟ้า
     for col in center_cols + right_cols:
-        format_dict[col] = "{:,.0f}"
+        if col in blue_cols:
+            format_dict[col] = "{:,.1f}"   # 🟦 คอลัมน์สีฟ้า: ใส่ลูกน้ำ มีทศนิยม 1 ตำแหน่งพอ
+        else:
+            format_dict[col] = "{:,.0f}"   # 🟨 คอลัมน์สีเหลืองและอื่นๆ: ใส่ลูกน้ำ ตรงกลาง ไม่เอาทศนิยม
 
     styled_df = df_display.style.format(format_dict, na_rep="")
     

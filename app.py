@@ -95,7 +95,28 @@ st.markdown("""
                    text-transform:uppercase; letter-spacing:0.08em;
                    border-bottom:2px solid #E5E7EB; padding-bottom:6px; margin:16px 0 10px; }
 
-    /* Date input — แก้สีตัวเลขวันที่ให้ชัดขึ้น */
+    /* File uploader ใน sidebar */
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] {
+        background: #2D527A !important;
+        border: 1.5px dashed #7AAFD4 !important;
+        border-radius: 8px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] * {
+        color: #E2EAF4 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stFileUploader"] button {
+        background: #1F4E79 !important;
+        border: 1px solid #7AAFD4 !important;
+        color: #FFFFFF !important;
+        border-radius: 6px !important;
+    }
+
+    /* Checkbox และ status ไฟล์ใน sidebar */
+    section[data-testid="stSidebar"] .stMarkdown p {
+        color: #E2EAF4 !important;
+        font-size: 0.85rem !important;
+        margin: 2px 0 !important;
+    }
     section[data-testid="stSidebar"] input[type="text"],
     section[data-testid="stSidebar"] input[type="date"],
     section[data-testid="stSidebar"] .stDateInput input {
@@ -686,12 +707,12 @@ with st.sidebar:
         matched = match_uploads(uploaded_files)
         for key, (prefix, label) in REQUIRED_PREFIXES.items():
             if key in matched:
-                st.markdown(f"✅ {label}")
+                st.markdown(f"<p style='color:#86EFAC'>✅ {label}</p>", unsafe_allow_html=True)
             else:
-                st.markdown(f"⬜ {label} *(ยังไม่ได้อัปโหลด)*")
+                st.markdown(f"<p style='color:#FCA5A5'>⬜ {label}</p>", unsafe_allow_html=True)
     else:
         for key, (prefix, label) in REQUIRED_PREFIXES.items():
-            st.markdown(f"⬜ {label}")
+            st.markdown(f"<p style='color:#93C5FD'>⬜ {label}</p>", unsafe_allow_html=True)
 
     st.markdown("---")
 
